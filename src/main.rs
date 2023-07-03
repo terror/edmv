@@ -61,7 +61,7 @@ impl Arguments {
       );
     }
 
-    let duplicates = renamed
+    let mut duplicates = renamed
       .iter()
       .fold(HashMap::new(), |mut acc, v| {
         *acc.entry(v).or_insert(0) += 1;
@@ -70,6 +70,8 @@ impl Arguments {
       .into_iter()
       .filter(|&(_, count)| count > 1)
       .collect::<Vec<_>>();
+
+    duplicates.sort();
 
     if !duplicates.is_empty() {
       bail!(
@@ -98,6 +100,8 @@ impl Arguments {
           println!("{old} -> {new}");
           changed += 1;
         }
+      } else {
+        println!("{old} -> {new}");
       }
     }
 
