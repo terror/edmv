@@ -8,16 +8,23 @@ use {
 
 type Result<T = (), E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
-struct Test {
+struct Path<'a> {
+  old: &'a str,
+  new: &'a str,
+  should_rename: bool,
+  should_create: bool,
+}
+
+struct Test<'a> {
   arguments: Vec<String>,
   expected_status: i32,
   expected_stderr: String,
   expected_stdout: String,
-  paths: Vec<(String, String, bool)>,
+  paths: Vec<Path<'a>>,
   tempdir: TempDir,
 }
 
-impl Test {
+impl<'a> Test<'a> {
   fn new() -> Result<Self> {
     Ok(Self {
       arguments: Vec::new(),
@@ -55,16 +62,8 @@ impl Test {
     }
   }
 
-  fn paths(self, paths: Vec<(&str, &str, bool)>) -> Self {
-    Self {
-      paths: paths
-        .into_iter()
-        .map(|(old, new, should_rename)| {
-          (old.to_owned(), new.to_owned(), should_rename)
-        })
-        .collect(),
-      ..self
-    }
+  fn paths(self, paths: Vec<Path<'a>>) -> Self {
+    Self { paths, ..self }
   }
 
   fn run(self) -> Result {
@@ -77,11 +76,13 @@ impl Test {
     let old = self
       .paths
       .iter()
-      .map(|path| path.0.clone())
+      .map(|path| (path.old, path.should_create))
       .collect::<Vec<_>>();
 
-    for path in &old {
-      File::create(self.tempdir.path().join(path))?;
+    for (path, should_create) in &old {
+      if *should_create {
+        File::create(self.tempdir.path().join(path))?;
+      }
     }
 
     let editor = format!(
@@ -89,14 +90,14 @@ impl Test {
       self
         .paths
         .iter()
-        .map(|path| path.1.clone())
+        .map(|path| path.new)
         .collect::<Vec<_>>()
         .join("\n")
     );
 
     command
       .current_dir(&self.tempdir)
-      .args(old)
+      .args(old.iter().map(|(path, _)| path))
       .arg("--editor")
       .arg(editor)
       .args(self.arguments.clone());
@@ -120,13 +121,20 @@ impl Test {
 
     assert_eq!(stdout, self.expected_stdout);
 
-    for (old, new, should_rename) in self.paths {
-      if should_rename {
-        assert!(!self.tempdir.path().join(old).exists());
-        assert!(self.tempdir.path().join(new).exists());
+    let exists = |name: &str| self.tempdir.path().join(name).exists();
+
+    for path in self.paths {
+      if !path.should_create {
+        assert!(!exists(path.old));
+        assert!(!exists(path.new));
       } else {
-        assert!(self.tempdir.path().join(old).exists());
-        assert!(!self.tempdir.path().join(new).exists());
+        if path.should_rename {
+          assert!(!exists(path.old));
+          assert!(exists(path.new));
+        } else {
+          assert!(exists(path.old));
+          assert!(!exists(path.new));
+        }
       }
     }
 
@@ -138,9 +146,24 @@ impl Test {
 fn renames_non_existing_file_paths() -> Result {
   Test::new()?
     .paths(vec![
-      ("a.txt", "d.txt", true),
-      ("b.txt", "e.txt", true),
-      ("c.txt", "f.txt", true),
+      Path {
+        old: "a.txt",
+        new: "d.txt",
+        should_rename: true,
+        should_create: true,
+      },
+      Path {
+        old: "b.txt",
+        new: "e.txt",
+        should_rename: true,
+        should_create: true,
+      },
+      Path {
+        old: "c.txt",
+        new: "f.txt",
+        should_rename: true,
+        should_create: true,
+      },
     ])
     .expected_status(0)
     .expected_stdout(
@@ -158,9 +181,24 @@ fn renames_non_existing_file_paths() -> Result {
 fn gives_warning_for_existing_file_paths() -> Result {
   Test::new()?
     .paths(vec![
-      ("a.txt", "b.txt", false),
-      ("b.txt", "e.txt", true),
-      ("c.txt", "f.txt", true),
+      Path {
+        old: "a.txt",
+        new: "b.txt",
+        should_rename: false,
+        should_create: true,
+      },
+      Path {
+        old: "b.txt",
+        new: "e.txt",
+        should_rename: true,
+        should_create: true,
+      },
+      Path {
+        old: "c.txt",
+        new: "f.txt",
+        should_rename: true,
+        should_create: true,
+      },
     ])
     .expected_status(0)
     .expected_stdout(
@@ -169,6 +207,24 @@ fn gives_warning_for_existing_file_paths() -> Result {
       b.txt -> e.txt
       c.txt -> f.txt
       2 paths changed
+      ",
+    )
+    .run()
+}
+
+#[test]
+fn errors_when_passed_invalid_path() -> Result {
+  Test::new()?
+    .paths(vec![Path {
+      old: "a.txt",
+      new: "b.txt",
+      should_rename: false,
+      should_create: false,
+    }])
+    .expected_status(1)
+    .expected_stderr(
+      "
+      error: Path does not exist: a.txt
       ",
     )
     .run()
