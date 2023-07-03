@@ -1,20 +1,22 @@
 use {
+  anyhow::bail,
   clap::Parser,
-  std::{collections::HashMap, env, fs, io::Write, process},
+  std::{
+    collections::HashMap,
+    env, fs,
+    io::Write,
+    process::{self, Command},
+  },
   tempfile::NamedTempFile,
 };
 
 #[derive(Debug, Parser)]
 struct Arguments {
+  #[clap(long, help = "Run without making any changes")]
+  dry_run: bool,
   #[clap(long, help = "Editor command to use")]
   editor: Option<String>,
-  #[clap(
-    long,
-    default_value = "false",
-    help = "Run without making any changes"
-  )]
-  dry_run: bool,
-  #[clap(long, default_value = "false", help = "Overwrite existing files")]
+  #[clap(long, help = "Overwrite existing files")]
   force: bool,
   #[clap(name = "paths", help = "Paths to edit")]
   paths: Vec<String>,
@@ -28,7 +30,7 @@ impl Arguments {
 
     for path in &self.paths {
       if !fs::metadata(path).is_ok() {
-        anyhow::bail!("Path does not exist: {}", path);
+        bail!("Path does not exist: {}", path);
       }
     }
 
@@ -36,10 +38,13 @@ impl Arguments {
 
     writeln!(file, "{}", self.paths.join("\n"))?;
 
-    let status = process::Command::new(editor).arg(file.path()).status()?;
+    let status = Command::new("bash")
+      .arg("-c")
+      .arg(format!("{} {}", editor, file.path().display()))
+      .status()?;
 
     if !status.success() {
-      anyhow::bail!("Failed to open temporary file in editor");
+      bail!("Failed to open temporary file in editor");
     }
 
     let renamed = fs::read_to_string(file.path())?
@@ -49,7 +54,7 @@ impl Arguments {
       .collect::<Vec<String>>();
 
     if self.paths.len() != renamed.len() {
-      anyhow::bail!(
+      bail!(
         "Number of paths changed, should be {}, got {}",
         self.paths.len(),
         renamed.len()
@@ -67,7 +72,7 @@ impl Arguments {
       .collect::<Vec<_>>();
 
     if !duplicates.is_empty() {
-      anyhow::bail!(
+      bail!(
         "Duplicate paths found: {}",
         duplicates
           .iter()
@@ -79,22 +84,22 @@ impl Arguments {
 
     let mut changed = 0;
 
-    self.paths.iter().zip(renamed.iter()).try_for_each(
-      |(old, new)| -> Result {
-        println!("{} -> {}", old, new);
-
-        if !self.dry_run {
-          if !self.force && fs::metadata(new).is_ok() {
-            println!("Path already exists: {new}, use --force to overwrite");
-          } else {
-            fs::rename(old, new)?;
-            changed += 1;
-          }
+    for (old, new) in self
+      .paths
+      .iter()
+      .zip(renamed.iter())
+      .filter(|(old, new)| old != new)
+    {
+      if !self.dry_run {
+        if !self.force && fs::metadata(new).is_ok() {
+          println!("Path already exists: {new}, use --force to overwrite");
+        } else {
+          fs::rename(old, new)?;
+          println!("{old} -> {new}");
+          changed += 1;
         }
-
-        Ok(())
-      },
-    )?;
+      }
+    }
 
     println!("{changed} paths changed");
 
@@ -106,7 +111,7 @@ type Result<T = (), E = anyhow::Error> = std::result::Result<T, E>;
 
 fn main() {
   if let Err(error) = Arguments::parse().run() {
-    eprintln!("erorr: {error}");
+    eprintln!("error: {error}");
     process::exit(1);
   }
 }
