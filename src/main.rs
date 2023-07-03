@@ -26,7 +26,7 @@ impl Arguments {
   fn run(self) -> Result {
     let editor = self
       .editor
-      .unwrap_or(env::var("EDITOR").unwrap_or("vim".to_string()));
+      .unwrap_or(env::var("EDITOR").unwrap_or("vi".to_string()));
 
     for path in &self.paths {
       if !fs::metadata(path).is_ok() {
