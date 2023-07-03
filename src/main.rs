@@ -7,7 +7,7 @@ use {
     io::Write,
     process::{self, Command},
   },
-  tempfile::NamedTempFile,
+  tempfile::Builder,
 };
 
 #[derive(Debug, Parser)]
@@ -34,7 +34,7 @@ impl Arguments {
       }
     }
 
-    let mut file = NamedTempFile::new()?;
+    let mut file = Builder::new().prefix("edmv-").suffix(".txt").tempfile()?;
 
     writeln!(file, "{}", self.paths.join("\n"))?;
 
