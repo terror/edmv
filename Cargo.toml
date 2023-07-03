@@ -1,0 +1,9 @@
+[package]
+name = "edmv"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.71"
+clap = { version = "4.3.10", features = ["derive"] }
+tempfile = "3.6.0"
