@@ -1,6 +1,6 @@
 use {
   clap::Parser,
-  std::{env, fs, io::Write, process},
+  std::{collections::HashMap, env, fs, io::Write, process},
   tempfile::NamedTempFile,
 };
 
@@ -58,7 +58,7 @@ impl Arguments {
 
     let duplicates = renamed
       .iter()
-      .fold(std::collections::HashMap::new(), |mut acc, v| {
+      .fold(HashMap::new(), |mut acc, v| {
         *acc.entry(v).or_insert(0) += 1;
         acc
       })
