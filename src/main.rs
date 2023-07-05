@@ -75,7 +75,7 @@ impl Arguments {
 
     if !duplicates.is_empty() {
       bail!(
-        "Duplicate paths found: {}",
+        "Duplicate path(s) found: {}",
         duplicates
           .iter()
           .map(|(path, _)| path.to_string())
@@ -84,25 +84,41 @@ impl Arguments {
       );
     }
 
-    let mut changed = 0;
+    let indegree = renamed.iter().fold(HashMap::new(), |mut acc, v| {
+      (self.paths.contains(v)).then(|| *acc.entry(v).or_insert(0) += 1);
+      acc
+    });
 
-    for (old, new) in self
+    let mut pairs = self
       .paths
       .iter()
       .zip(renamed.iter())
       .filter(|(old, new)| old != new)
-    {
-      if !self.dry_run {
-        if !self.force && fs::metadata(new).is_ok() {
-          println!("Path already exists: {new}, use --force to overwrite");
-        } else {
-          fs::rename(old, new)?;
-          println!("{old} -> {new}");
-          changed += 1;
-        }
-      } else {
-        println!("{old} -> {new}");
+      .collect::<Vec<_>>();
+
+    pairs.sort_by(|a, b| {
+      indegree
+        .get(a.1)
+        .unwrap_or(&0)
+        .cmp(indegree.get(b.1).unwrap_or(&0))
+    });
+
+    let mut changed = 0;
+
+    for (old, new) in pairs {
+      let exists = !self.force && fs::metadata(new).is_ok();
+
+      if exists {
+        println!("Path already exists: {new}, use --force to overwrite");
+        continue;
       }
+
+      if !self.dry_run {
+        fs::rename(old, new)?;
+        changed += 1;
+      }
+
+      println!("{old} -> {new}");
     }
 
     println!("{changed} paths changed");
