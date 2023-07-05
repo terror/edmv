@@ -43,10 +43,7 @@ impl Arguments {
 
     writeln!(file, "{}", self.paths.join("\n"))?;
 
-    let status = Command::new("bash")
-      .arg("-c")
-      .arg(format!("{} {}", editor, file.path().display()))
-      .status()?;
+    let status = Command::new(editor).arg(file.path()).status()?;
 
     if !status.success() {
       bail!("Failed to open temporary file in editor");
@@ -111,10 +108,10 @@ impl Arguments {
     let mut changed = 0;
 
     for (old, new) in pairs {
-      let exists = !self.force && fs::metadata(new).is_ok();
+      let overwrite = !self.force && fs::metadata(new).is_ok();
 
-      if exists {
-        println!("Path already exists: {new}, use --force to overwrite");
+      if overwrite {
+        println!("Destination already exists: {new}, use --force to overwrite");
         continue;
       }
 

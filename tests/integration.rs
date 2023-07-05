@@ -1,7 +1,13 @@
 use {
   executable_path::executable_path,
   pretty_assertions::assert_eq,
-  std::{fs::File, path::PathBuf, process::Command, str},
+  std::{
+    fs::{self, File, Permissions},
+    os::unix::fs::PermissionsExt,
+    path::PathBuf,
+    process::Command,
+    str,
+  },
   tempdir::TempDir,
   unindent::Unindent,
 };
@@ -78,34 +84,35 @@ impl<'a> Test<'a> {
   fn command(&self) -> Result<Command> {
     let mut command = Command::new(executable_path(env!("CARGO_PKG_NAME")));
 
-    let old = self
-      .paths
-      .iter()
-      .map(|path| (path.old, path.create))
-      .collect::<Vec<_>>();
-
-    for (path, create) in &old {
-      if *create {
-        File::create(self.tempdir.path().join(path))?;
+    for path in &self.paths {
+      if path.create {
+        File::create(self.tempdir.path().join(path.old))?;
       }
     }
 
-    let editor = format!(
-      "echo -e '{}' >",
-      self
-        .paths
-        .iter()
-        .map(|path| path.new)
-        .collect::<Vec<_>>()
-        .join("\n")
-    );
+    let editor = self.tempdir.path().join("editor");
+
+    fs::write(
+      &editor,
+      format!(
+        "#!/bin/bash\necho -e \"{}\" > \"$1\"",
+        self
+          .paths
+          .iter()
+          .map(|path| path.new)
+          .collect::<Vec<_>>()
+          .join("\n")
+      ),
+    )?;
+
+    fs::set_permissions(&editor, Permissions::from_mode(0o755))?;
 
     command
       .current_dir(&self.tempdir)
-      .args(old.iter().map(|(path, _)| path))
+      .args(self.paths.iter().map(|path| path.old))
       .arg("--editor")
       .arg(editor)
-      .args(self.arguments.clone());
+      .args(&self.arguments);
 
     Ok(command)
   }
@@ -178,7 +185,7 @@ fn renames_non_existing_file_paths() -> Result {
 }
 
 #[test]
-fn gives_warning_for_existing_file_paths() -> Result {
+fn gives_warning_for_existing_destinations() -> Result {
   Test::new()?
     .paths(vec![
       Path {
@@ -204,7 +211,7 @@ fn gives_warning_for_existing_file_paths() -> Result {
     .expected_status(0)
     .expected_stdout(
       "
-      Path already exists: d.txt, use --force to overwrite
+      Destination already exists: d.txt, use --force to overwrite
       b.txt -> e.txt
       c.txt -> f.txt
       2 paths changed
@@ -380,6 +387,39 @@ fn sorts_by_indegree() -> Result {
       d.txt -> e.txt
       a.txt -> b.txt
       3 paths changed
+      ",
+    )
+    .argument("--force")
+    .run()
+}
+
+#[test]
+fn does_not_perform_self_renames() -> Result {
+  Test::new()?
+    .paths(vec![
+      Path {
+        old: "a.txt",
+        new: "a.txt",
+        create: true,
+        exists: vec!["a.txt"],
+      },
+      Path {
+        old: "b.txt",
+        new: "b.txt",
+        create: true,
+        exists: vec!["b.txt"],
+      },
+      Path {
+        old: "c.txt",
+        new: "c.txt",
+        create: true,
+        exists: vec!["c.txt"],
+      },
+    ])
+    .expected_status(0)
+    .expected_stdout(
+      "
+      0 paths changed
       ",
     )
     .argument("--force")
