@@ -14,7 +14,6 @@ fmt:
 
 fmt-check:
   cargo fmt --all -- --check
-  @echo formatting check done
 
 run *args:
   cargo run -- {{args}}

@@ -136,8 +136,8 @@ impl<'a> Test<'a> {
     let exists = |name: &str| self.tempdir.path().join(name).exists();
 
     for path in self.paths {
-      for option in vec![path.old, path.new] {
-        if path.exists.contains(&option) {
+      for option in &[path.old, path.new] {
+        if path.exists.contains(option) {
           assert!(exists(option));
         } else {
           assert!(!exists(option));

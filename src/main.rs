@@ -32,7 +32,7 @@ impl Arguments {
       .paths
       .clone()
       .into_iter()
-      .filter(|path| !fs::metadata(path).is_ok())
+      .filter(|path| fs::metadata(path).is_err())
       .collect::<Vec<String>>();
 
     if !absent.is_empty() {
