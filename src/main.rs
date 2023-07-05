@@ -28,10 +28,15 @@ impl Arguments {
       .editor
       .unwrap_or(env::var("EDITOR").unwrap_or("vi".to_string()));
 
-    for path in &self.paths {
-      if !fs::metadata(path).is_ok() {
-        bail!("Path does not exist: {}", path);
-      }
+    let absent = self
+      .paths
+      .clone()
+      .into_iter()
+      .filter(|path| !fs::metadata(path).is_ok())
+      .collect::<Vec<String>>();
+
+    if !absent.is_empty() {
+      bail!("Found path(s) that do not exist: {}", absent.join(", "));
     }
 
     let mut file = Builder::new().prefix("edmv-").suffix(".txt").tempfile()?;

@@ -287,18 +287,26 @@ fn dry_run_works() -> Result {
 }
 
 #[test]
-fn errors_when_passed_invalid_path() -> Result {
+fn errors_when_passed_invalid_paths() -> Result {
   Test::new()?
-    .paths(vec![Path {
-      old: "a.txt",
-      new: "b.txt",
-      create: false,
-      exists: vec![],
-    }])
+    .paths(vec![
+      Path {
+        old: "a.txt",
+        new: "b.txt",
+        create: false,
+        exists: vec![],
+      },
+      Path {
+        old: "c.txt",
+        new: "b.txt",
+        create: false,
+        exists: vec![],
+      },
+    ])
     .expected_status(1)
     .expected_stderr(
       "
-      error: Path does not exist: a.txt
+      error: Found path(s) that do not exist: a.txt, c.txt
       ",
     )
     .run()
