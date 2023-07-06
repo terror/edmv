@@ -1,14 +1,29 @@
 use {
   anyhow::bail,
   clap::Parser,
+  path_absolutize::*,
   std::{
     collections::HashMap,
     env, fs,
     io::Write,
+    path::Path,
     process::{self, Command},
   },
-  tempfile::Builder,
+  tempfile::{Builder, NamedTempFile},
 };
+
+trait TempfileExt {
+  fn write(self, content: &str) -> Result<Self>
+  where
+    Self: Sized;
+}
+
+impl TempfileExt for NamedTempFile {
+  fn write(mut self, content: &str) -> Result<Self> {
+    writeln!(self, "{}", content)?;
+    Ok(self)
+  }
+}
 
 #[derive(Debug, Parser)]
 struct Arguments {
@@ -39,9 +54,11 @@ impl Arguments {
       bail!("Found path(s) that do not exist: {}", absent.join(", "));
     }
 
-    let mut file = Builder::new().prefix("edmv-").suffix(".txt").tempfile()?;
-
-    writeln!(file, "{}", self.paths.join("\n"))?;
+    let file = Builder::new()
+      .prefix("edmv-")
+      .suffix(".txt")
+      .tempfile()?
+      .write(&self.paths.join("\n"))?;
 
     let status = Command::new(editor).arg(file.path()).status()?;
 
@@ -86,26 +103,12 @@ impl Arguments {
       );
     }
 
-    let indegree = renamed.iter().fold(HashMap::new(), |mut acc, v| {
-      (self.paths.contains(v)).then(|| *acc.entry(v).or_insert(0) += 1);
-      acc
-    });
-
     let mut pairs = self
       .paths
       .iter()
       .zip(renamed.iter())
       .filter(|(old, new)| old != new)
       .collect::<Vec<_>>();
-
-    pairs.sort_by(|a, b| {
-      indegree
-        .get(a.1)
-        .unwrap_or(&0)
-        .cmp(indegree.get(b.1).unwrap_or(&0))
-    });
-
-    let mut changed = 0;
 
     let existing = pairs
       .iter()
@@ -123,6 +126,36 @@ impl Arguments {
       );
     }
 
+    let mut absent = Vec::new();
+
+    for (_, new) in pairs.clone() {
+      match Path::new(new).absolutize()?.parent() {
+        Some(par) => (!par.exists()).then(|| absent.push(new.to_owned())),
+        None => continue,
+      };
+    }
+
+    if !absent.is_empty() {
+      bail!(
+        "Found destination directory(ies) that do not exist: {}",
+        absent.join(", ")
+      );
+    }
+
+    let indegree = renamed.iter().fold(HashMap::new(), |mut acc, v| {
+      (self.paths.contains(v)).then(|| *acc.entry(v).or_insert(0) += 1);
+      acc
+    });
+
+    pairs.sort_by(|a, b| {
+      indegree
+        .get(a.1)
+        .unwrap_or(&0)
+        .cmp(indegree.get(b.1).unwrap_or(&0))
+    });
+
+    let mut changed = 0;
+
     for (old, new) in pairs {
       if !self.dry_run {
         fs::rename(old, new)?;
@@ -132,7 +165,7 @@ impl Arguments {
       println!("{old} -> {new}");
     }
 
-    println!("{changed} paths changed");
+    println!("{changed} path(s) changed");
 
     Ok(())
   }

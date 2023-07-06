@@ -178,7 +178,7 @@ fn renames_non_existing_file_paths() -> Result {
       a.txt -> d.txt
       b.txt -> e.txt
       c.txt -> f.txt
-      3 paths changed
+      3 path(s) changed
       ",
     )
     .run()
@@ -248,7 +248,7 @@ fn forces_existing_file_paths() -> Result {
       a.txt -> d.txt
       b.txt -> e.txt
       c.txt -> f.txt
-      3 paths changed
+      3 path(s) changed
       ",
     )
     .argument("--force")
@@ -285,7 +285,7 @@ fn dry_run_works() -> Result {
       a.txt -> d.txt
       b.txt -> e.txt
       c.txt -> f.txt
-      0 paths changed
+      0 path(s) changed
       ",
     )
     .run()
@@ -384,7 +384,7 @@ fn sorts_by_indegree() -> Result {
       b.txt -> c.txt
       d.txt -> e.txt
       a.txt -> b.txt
-      3 paths changed
+      3 path(s) changed
       ",
     )
     .argument("--force")
@@ -417,9 +417,35 @@ fn does_not_perform_self_renames() -> Result {
     .expected_status(0)
     .expected_stdout(
       "
-      0 paths changed
+      0 path(s) changed
       ",
     )
     .argument("--force")
+    .run()
+}
+
+#[test]
+fn gives_error_for_invalid_destination_directory() -> Result {
+  Test::new()?
+    .paths(vec![
+      Path {
+        old: "a.txt",
+        new: "foo/a.txt",
+        create: true,
+        exists: vec!["a.txt"],
+      },
+      Path {
+        old: "b.txt",
+        new: "bar/baz/c.txt",
+        create: true,
+        exists: vec!["b.txt"],
+      },
+    ])
+    .expected_status(1)
+    .expected_stderr(
+      "
+      error: Found destination directory(ies) that do not exist: foo/a.txt, bar/baz/c.txt
+      ",
+    )
     .run()
 }
