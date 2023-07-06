@@ -77,7 +77,7 @@ impl Arguments {
 
     if !duplicates.is_empty() {
       bail!(
-        "Duplicate path(s) found: {}",
+        "Duplicate destination(s) found: {}",
         duplicates
           .iter()
           .map(|(path, _)| path.to_string())
@@ -107,14 +107,23 @@ impl Arguments {
 
     let mut changed = 0;
 
+    let existing = pairs
+      .iter()
+      .filter(|(_, new)| fs::metadata(new).is_ok())
+      .collect::<Vec<_>>();
+
+    if !self.force && !existing.is_empty() {
+      bail!(
+        "Destination(s) already exist: {}, use --force to overwrite",
+        existing
+          .iter()
+          .map(|(_, new)| new.to_string())
+          .collect::<Vec<String>>()
+          .join(", ")
+      );
+    }
+
     for (old, new) in pairs {
-      let overwrite = !self.force && fs::metadata(new).is_ok();
-
-      if overwrite {
-        println!("Destination already exists: {new}, use --force to overwrite");
-        continue;
-      }
-
       if !self.dry_run {
         fs::rename(old, new)?;
         changed += 1;

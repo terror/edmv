@@ -185,7 +185,7 @@ fn renames_non_existing_file_paths() -> Result {
 }
 
 #[test]
-fn gives_warning_for_existing_destinations() -> Result {
+fn gives_error_for_existing_destinations() -> Result {
   Test::new()?
     .paths(vec![
       Path {
@@ -198,23 +198,21 @@ fn gives_warning_for_existing_destinations() -> Result {
         old: "b.txt",
         new: "e.txt",
         create: true,
-        exists: vec!["e.txt"],
+        exists: vec!["b.txt", "e.txt"],
       },
       Path {
         old: "c.txt",
         new: "f.txt",
         create: true,
-        exists: vec!["f.txt"],
+        exists: vec!["c.txt"],
       },
     ])
     .create_file("d.txt".into())?
-    .expected_status(0)
-    .expected_stdout(
+    .create_file("e.txt".into())?
+    .expected_status(1)
+    .expected_stderr(
       "
-      Destination already exists: d.txt, use --force to overwrite
-      b.txt -> e.txt
-      c.txt -> f.txt
-      2 paths changed
+      error: Destination(s) already exist: d.txt, e.txt, use --force to overwrite
       ",
     )
     .run()
@@ -351,7 +349,7 @@ fn disallow_duplicate_paths() -> Result {
     .expected_status(1)
     .expected_stderr(
       "
-      error: Duplicate path(s) found: c.txt, f.txt
+      error: Duplicate destination(s) found: c.txt, f.txt
       ",
     )
     .run()
