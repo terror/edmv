@@ -13,20 +13,7 @@ use {
   tempfile::{Builder, NamedTempFile},
 };
 
-#[derive(Debug, Parser)]
-struct Arguments {
-  #[clap(long, help = "Editor command to use")]
-  editor: Option<String>,
-  #[clap(long, help = "Overwrite existing files")]
-  force: bool,
-  #[clap(long, help = "Rename sources to temporary files internally")]
-  temp: bool,
-  #[clap(long, help = "Run without making any changes")]
-  dry_run: bool,
-  #[clap(name = "sources", help = "Paths to edit")]
-  sources: Vec<String>,
-}
-
+#[derive(Debug)]
 enum Intermediate {
   File(NamedTempFile),
   Directory(TempDir),
@@ -50,6 +37,24 @@ impl Intermediate {
       Intermediate::Directory(dir) => dir.path(),
     }
   }
+}
+
+#[derive(Debug, Parser)]
+#[command(about, author, version)]
+struct Arguments {
+  #[clap(long, help = "Editor command to use")]
+  editor: Option<String>,
+  #[clap(long, help = "Overwrite existing files")]
+  force: bool,
+  #[clap(
+    long,
+    help = "Rename sources to intermediate temporary files internally"
+  )]
+  temp: bool,
+  #[clap(long, help = "Run without making any changes")]
+  dry_run: bool,
+  #[clap(name = "sources", help = "Paths to edit")]
+  sources: Vec<String>,
 }
 
 impl Arguments {

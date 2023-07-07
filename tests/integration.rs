@@ -381,8 +381,8 @@ fn handles_intermediate_conflicts() -> Result {
         exists: vec!["e.txt"],
       },
     ])
-    .argument("--temp")
     .argument("--force")
+    .argument("--temp")
     .expected_status(0)
     .expected_stdout(
       "
