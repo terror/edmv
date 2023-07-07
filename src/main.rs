@@ -175,43 +175,48 @@ impl Arguments {
 
     let mut changed = 0;
 
-    if self.temp {
-      let intermediates = self
+    let intermediates = self.temp.then_some(
+      self
         .sources
         .iter()
         .map(|path| Intermediate::try_from(PathBuf::from(path)))
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()?,
+    );
 
-      let zipped = pairs
-        .iter()
-        .zip(intermediates.iter())
-        .map(|((source, destination), internal)| {
-          (*source, internal, *destination)
-        })
-        .collect::<Vec<_>>();
+    match intermediates {
+      Some(intermediates) => {
+        let zipped = pairs
+          .iter()
+          .zip(intermediates.iter())
+          .map(|((source, destination), internal)| {
+            (*source, internal, *destination)
+          })
+          .collect::<Vec<_>>();
 
-      for (source, intermediate, _) in &zipped {
-        if !self.dry_run {
-          fs::rename(source, intermediate.path())?;
+        for (source, intermediate, _) in &zipped {
+          if !self.dry_run {
+            fs::rename(source, intermediate.path())?;
+          }
+        }
+
+        for (source, intermediate, destination) in &zipped {
+          if !self.dry_run {
+            fs::rename(intermediate.path(), destination)?;
+            changed += 1;
+          }
+
+          println!("{} -> {}", source, destination);
         }
       }
+      None => {
+        for (source, destination) in pairs {
+          if !self.dry_run {
+            fs::rename(source, destination)?;
+            changed += 1;
+          }
 
-      for (source, intermediate, destination) in &zipped {
-        if !self.dry_run {
-          fs::rename(intermediate.path(), destination)?;
-          changed += 1;
+          println!("{} -> {}", source, destination);
         }
-
-        println!("{} -> {}", source, destination);
-      }
-    } else {
-      for (source, destination) in pairs {
-        if !self.dry_run {
-          fs::rename(source, destination)?;
-          changed += 1;
-        }
-
-        println!("{} -> {}", source, destination);
       }
     }
 
