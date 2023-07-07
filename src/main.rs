@@ -6,35 +6,50 @@ use {
     collections::HashMap,
     env, fs,
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     process::{self, Command},
   },
+  tempdir::TempDir,
   tempfile::{Builder, NamedTempFile},
 };
 
-trait TempfileExt {
-  fn write(self, content: &str) -> Result<Self>
-  where
-    Self: Sized;
-}
-
-impl TempfileExt for NamedTempFile {
-  fn write(mut self, content: &str) -> Result<Self> {
-    writeln!(self, "{}", content)?;
-    Ok(self)
-  }
-}
-
 #[derive(Debug, Parser)]
 struct Arguments {
-  #[clap(long, help = "Run without making any changes")]
-  dry_run: bool,
   #[clap(long, help = "Editor command to use")]
   editor: Option<String>,
   #[clap(long, help = "Overwrite existing files")]
   force: bool,
-  #[clap(name = "paths", help = "Paths to edit")]
-  paths: Vec<String>,
+  #[clap(long, help = "Rename sources to temporary files internally")]
+  temp: bool,
+  #[clap(long, help = "Run without making any changes")]
+  dry_run: bool,
+  #[clap(name = "sources", help = "Paths to edit")]
+  sources: Vec<String>,
+}
+
+enum Intermediate {
+  File(NamedTempFile),
+  Directory(TempDir),
+}
+
+impl TryFrom<PathBuf> for Intermediate {
+  type Error = anyhow::Error;
+
+  fn try_from(path: PathBuf) -> Result<Self> {
+    Ok(match path.is_file() {
+      true => Intermediate::File(NamedTempFile::new()?),
+      _ => Intermediate::Directory(TempDir::new(env!("CARGO_PKG_NAME"))?),
+    })
+  }
+}
+
+impl Intermediate {
+  fn path(&self) -> &Path {
+    match self {
+      Intermediate::File(file) => file.path(),
+      Intermediate::Directory(dir) => dir.path(),
+    }
+  }
 }
 
 impl Arguments {
@@ -44,21 +59,22 @@ impl Arguments {
       .unwrap_or(env::var("EDITOR").unwrap_or("vi".to_string()));
 
     let absent = self
-      .paths
+      .sources
       .clone()
       .into_iter()
       .filter(|path| fs::metadata(path).is_err())
       .collect::<Vec<String>>();
 
     if !absent.is_empty() {
-      bail!("Found path(s) that do not exist: {}", absent.join(", "));
+      bail!("Found non-existent path(s): {}", absent.join(", "));
     }
 
-    let file = Builder::new()
-      .prefix("edmv-")
+    let mut file = Builder::new()
+      .prefix(&format!("{}-", env!("CARGO_PKG_NAME")))
       .suffix(".txt")
-      .tempfile()?
-      .write(&self.paths.join("\n"))?;
+      .tempfile()?;
+
+    writeln!(file, "{}", &self.sources.join("\n"))?;
 
     let status = Command::new(editor).arg(file.path()).status()?;
 
@@ -66,21 +82,21 @@ impl Arguments {
       bail!("Failed to open temporary file in editor");
     }
 
-    let renamed = fs::read_to_string(file.path())?
+    let destinations = fs::read_to_string(file.path())?
       .trim()
       .lines()
       .map(|line| line.to_string())
       .collect::<Vec<String>>();
 
-    if self.paths.len() != renamed.len() {
+    if self.sources.len() != destinations.len() {
       bail!(
-        "Number of paths changed, should be {}, got {}",
-        self.paths.len(),
-        renamed.len()
+        "Number of sources changed, should be {}, got {}",
+        self.sources.len(),
+        destinations.len()
       );
     }
 
-    let mut duplicates = renamed
+    let mut duplicates = destinations
       .iter()
       .fold(HashMap::new(), |mut acc, v| {
         *acc.entry(v).or_insert(0) += 1;
@@ -103,16 +119,9 @@ impl Arguments {
       );
     }
 
-    let mut pairs = self
-      .paths
+    let existing = destinations
       .iter()
-      .zip(renamed.iter())
-      .filter(|(old, new)| old != new)
-      .collect::<Vec<_>>();
-
-    let existing = pairs
-      .iter()
-      .filter(|(_, new)| fs::metadata(new).is_ok())
+      .filter(|path| fs::metadata(path).is_ok())
       .collect::<Vec<_>>();
 
     if !self.force && !existing.is_empty() {
@@ -120,60 +129,88 @@ impl Arguments {
         "Found destination(s) that already exist: {}, use --force to overwrite",
         existing
           .iter()
-          .map(|(_, new)| new.to_string())
+          .map(|path| path.to_string())
           .collect::<Vec<String>>()
           .join(", ")
       );
     }
 
-    let absolutes = renamed
+    let absolutes = destinations
       .iter()
       .map(|path| Path::new(path).absolutize().map_err(anyhow::Error::from))
       .collect::<Result<Vec<_>>>()?;
 
     let par = absolutes
       .iter()
-      .zip(renamed.iter())
-      .filter_map(|(path, rename)| path.parent().map(|parent| (parent, rename)))
+      .zip(destinations.iter())
+      .filter_map(|(path, destination)| {
+        path.parent().map(|parent| (parent, destination))
+      })
       .collect::<Vec<_>>();
 
     let absent = par
       .iter()
       .filter(|(path, _)| !path.exists())
-      .map(|(_, rename)| rename.to_string())
+      .map(|(_, destination)| destination.to_string())
       .collect::<Vec<String>>();
 
     if !absent.is_empty() {
       bail!(
-        "Found destination(s) with invalid directory(ies): {}",
+        "Found destination(s) with non-existent directory(ies): {}",
         absent.join(", ")
       );
     }
 
-    let indegree = renamed.iter().fold(HashMap::new(), |mut acc, v| {
-      (self.paths.contains(v)).then(|| *acc.entry(v).or_insert(0) += 1);
-      acc
-    });
-
-    pairs.sort_by(|a, b| {
-      indegree
-        .get(a.1)
-        .unwrap_or(&0)
-        .cmp(indegree.get(b.1).unwrap_or(&0))
-    });
+    let pairs = self
+      .sources
+      .iter()
+      .zip(destinations.iter())
+      .filter(|(source, destination)| source != destination)
+      .collect::<Vec<(&String, &String)>>();
 
     let mut changed = 0;
 
-    for (old, new) in pairs {
-      if !self.dry_run {
-        fs::rename(old, new)?;
-        changed += 1;
+    if self.temp {
+      let intermediates = self
+        .sources
+        .iter()
+        .map(|path| Intermediate::try_from(PathBuf::from(path)))
+        .collect::<Result<Vec<_>>>()?;
+
+      let zipped = pairs
+        .iter()
+        .zip(intermediates.iter())
+        .map(|((source, destination), internal)| {
+          (*source, internal, *destination)
+        })
+        .collect::<Vec<_>>();
+
+      for (source, intermediate, _) in &zipped {
+        if !self.dry_run {
+          fs::rename(source, intermediate.path())?;
+        }
       }
 
-      println!("{old} -> {new}");
+      for (source, intermediate, destination) in &zipped {
+        if !self.dry_run {
+          fs::rename(intermediate.path(), destination)?;
+          changed += 1;
+        }
+
+        println!("{} -> {}", source, destination);
+      }
+    } else {
+      for (source, destination) in pairs {
+        if !self.dry_run {
+          fs::rename(source, destination)?;
+          changed += 1;
+        }
+
+        println!("{} -> {}", source, destination);
+      }
     }
 
-    println!("{changed} path(s) changed");
+    println!("{} path(s) changed", changed);
 
     Ok(())
   }

@@ -23,15 +23,16 @@ cargo install --path .
 ### Usage
 
 ```
-Usage: edmv [OPTIONS] [paths]...
+Usage: edmv [OPTIONS] [sources]...
 
 Arguments:
-  [paths]...  Paths to edit
+  [sources]...  Paths to edit
 
 Options:
-      --dry-run          Run without making any changes
       --editor <EDITOR>  Editor command to use
       --force            Overwrite existing files
+      --temp             Rename sources to temporary files internally
+      --dry-run          Run without making any changes
   -h, --help             Print help
 ```
 
