@@ -94,7 +94,7 @@ impl Arguments {
 
     if !duplicates.is_empty() {
       bail!(
-        "Duplicate destination(s) found: {}",
+        "Found duplicate destination(s): {}",
         duplicates
           .iter()
           .map(|(path, _)| path.to_string())
@@ -117,7 +117,7 @@ impl Arguments {
 
     if !self.force && !existing.is_empty() {
       bail!(
-        "Destination(s) already exist: {}, use --force to overwrite",
+        "Found destination(s) that already exist: {}, use --force to overwrite",
         existing
           .iter()
           .map(|(_, new)| new.to_string())
@@ -126,18 +126,26 @@ impl Arguments {
       );
     }
 
-    let mut absent = Vec::new();
+    let absolutes = renamed
+      .iter()
+      .map(|path| Path::new(path).absolutize().map_err(anyhow::Error::from))
+      .collect::<Result<Vec<_>>>()?;
 
-    for (_, new) in pairs.clone() {
-      match Path::new(new).absolutize()?.parent() {
-        Some(par) => (!par.exists()).then(|| absent.push(new.to_owned())),
-        None => continue,
-      };
-    }
+    let par = absolutes
+      .iter()
+      .zip(renamed.iter())
+      .filter_map(|(path, rename)| path.parent().map(|parent| (parent, rename)))
+      .collect::<Vec<_>>();
+
+    let absent = par
+      .iter()
+      .filter(|(path, _)| !path.exists())
+      .map(|(_, rename)| rename.to_string())
+      .collect::<Vec<String>>();
 
     if !absent.is_empty() {
       bail!(
-        "Found destination directory(ies) that do not exist: {}",
+        "Found destination(s) with invalid directory(ies): {}",
         absent.join(", ")
       );
     }

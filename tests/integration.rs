@@ -212,7 +212,7 @@ fn gives_error_for_existing_destinations() -> Result {
     .expected_status(1)
     .expected_stderr(
       "
-      error: Destination(s) already exist: d.txt, e.txt, use --force to overwrite
+      error: Found destination(s) that already exist: d.txt, e.txt, use --force to overwrite
       ",
     )
     .run()
@@ -349,7 +349,7 @@ fn disallow_duplicate_paths() -> Result {
     .expected_status(1)
     .expected_stderr(
       "
-      error: Duplicate destination(s) found: c.txt, f.txt
+      error: Found duplicate destination(s): c.txt, f.txt
       ",
     )
     .run()
@@ -444,7 +444,7 @@ fn gives_error_for_invalid_destination_directory() -> Result {
     .expected_status(1)
     .expected_stderr(
       "
-      error: Found destination directory(ies) that do not exist: foo/a.txt, bar/baz/c.txt
+      error: Found destination(s) with invalid directory(ies): foo/a.txt, bar/baz/c.txt
       ",
     )
     .run()
