@@ -91,7 +91,7 @@ impl Arguments {
 
     if self.sources.len() != destinations.len() {
       bail!(
-        "Number of sources changed, should be {}, got {}",
+        "Destination count mismatch, should be {} but received {}",
         self.sources.len(),
         destinations.len()
       );
