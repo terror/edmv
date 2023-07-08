@@ -7,7 +7,7 @@ use {
     process::Command,
     str,
   },
-  tempdir::TempDir,
+  tempfile::TempDir,
   unindent::Unindent,
 };
 
@@ -37,7 +37,7 @@ impl<'a> Test<'a> {
       expected_stderr: String::new(),
       expected_stdout: String::new(),
       sources: Vec::new(),
-      tempdir: TempDir::new("test")?,
+      tempdir: TempDir::new()?,
     })
   }
 

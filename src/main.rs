@@ -9,8 +9,7 @@ use {
     path::{Path, PathBuf},
     process::{self, Command},
   },
-  tempdir::TempDir,
-  tempfile::{Builder, NamedTempFile},
+  tempfile::{Builder, NamedTempFile, TempDir},
 };
 
 #[derive(Debug)]
@@ -25,7 +24,7 @@ impl TryFrom<PathBuf> for Intermediate {
   fn try_from(path: PathBuf) -> Result<Self> {
     Ok(match path.is_file() {
       true => Intermediate::File(NamedTempFile::new()?),
-      _ => Intermediate::Directory(TempDir::new(env!("CARGO_PKG_NAME"))?),
+      _ => Intermediate::Directory(TempDir::new()?),
     })
   }
 }
