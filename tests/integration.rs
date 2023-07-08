@@ -450,7 +450,7 @@ fn gives_error_for_invalid_destination_directory() -> Result {
     .expected_status(1)
     .expected_stderr(
       "
-      error: Found destination(s) with non-existent directory(ies): foo/a.txt, bar/baz/c.txt
+      error: Found destination(s) placed within a non-existent directory: foo/a.txt, bar/baz/c.txt
       ",
     )
     .run()

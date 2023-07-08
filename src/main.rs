@@ -169,7 +169,7 @@ impl Arguments {
 
     if !absent.is_empty() {
       bail!(
-        "Found destination(s) with non-existent directory(ies): {}",
+        "Found destination(s) placed within a non-existent directory: {}",
         absent.join(", ")
       );
     }
@@ -189,8 +189,8 @@ impl Arguments {
         let combined = pairs
           .iter()
           .zip(intermediates.iter())
-          .map(|((source, destination), internal)| {
-            (*source, internal, *destination)
+          .map(|((source, destination), intermediate)| {
+            (*source, intermediate, *destination)
           })
           .collect::<Vec<_>>();
 
