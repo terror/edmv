@@ -13,9 +13,9 @@ use {
 
 type Result<T = (), E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
-struct Path<'a> {
-  source: &'a str,
-  destination: &'a str,
+struct Source<'a> {
+  from: &'a str,
+  to: &'a str,
   create: bool,
   exists: Vec<&'a str>,
 }
@@ -25,7 +25,7 @@ struct Test<'a> {
   expected_status: i32,
   expected_stderr: String,
   expected_stdout: String,
-  sources: Vec<Path<'a>>,
+  sources: Vec<Source<'a>>,
   tempdir: TempDir,
 }
 
@@ -67,7 +67,7 @@ impl<'a> Test<'a> {
     }
   }
 
-  fn sources(self, sources: Vec<Path<'a>>) -> Self {
+  fn sources(self, sources: Vec<Source<'a>>) -> Self {
     Self { sources, ..self }
   }
 
@@ -83,11 +83,14 @@ impl<'a> Test<'a> {
   fn command(&self) -> Result<Command> {
     let mut command = Command::new(executable_path(env!("CARGO_PKG_NAME")));
 
-    for path in &self.sources {
-      if path.create {
-        File::create(self.tempdir.path().join(path.source))?;
-      }
-    }
+    self
+      .sources
+      .iter()
+      .filter(|path| path.create)
+      .try_for_each(|path| -> Result {
+        File::create(self.tempdir.path().join(path.from))?;
+        Ok(())
+      })?;
 
     let editor = self.tempdir.path().join("editor");
 
@@ -98,7 +101,7 @@ impl<'a> Test<'a> {
         self
           .sources
           .iter()
-          .map(|path| path.destination)
+          .map(|path| path.to)
           .collect::<Vec<_>>()
           .join("\n")
       ),
@@ -108,7 +111,7 @@ impl<'a> Test<'a> {
 
     command
       .current_dir(&self.tempdir)
-      .args(self.sources.iter().map(|path| path.source))
+      .args(self.sources.iter().map(|path| path.from))
       .arg("--editor")
       .arg(editor)
       .args(&self.arguments);
@@ -140,7 +143,7 @@ impl<'a> Test<'a> {
     self
       .sources
       .iter()
-      .flat_map(|path| vec![path.source, path.destination])
+      .flat_map(|path| vec![path.from, path.to])
       .for_each(|option| {
         assert_eq!(
           exists.contains(&option),
@@ -156,21 +159,21 @@ impl<'a> Test<'a> {
 fn renames_non_existing_sources() -> Result {
   Test::new()?
     .sources(vec![
-      Path {
-        source: "a.txt",
-        destination: "d.txt",
+      Source {
+        from: "a.txt",
+        to: "d.txt",
         create: true,
         exists: vec!["d.txt"],
       },
-      Path {
-        source: "b.txt",
-        destination: "e.txt",
+      Source {
+        from: "b.txt",
+        to: "e.txt",
         create: true,
         exists: vec!["e.txt"],
       },
-      Path {
-        source: "c.txt",
-        destination: "f.txt",
+      Source {
+        from: "c.txt",
+        to: "f.txt",
         create: true,
         exists: vec!["f.txt"],
       },
@@ -191,21 +194,21 @@ fn renames_non_existing_sources() -> Result {
 fn gives_error_for_existing_destinations() -> Result {
   Test::new()?
     .sources(vec![
-      Path {
-        source: "a.txt",
-        destination: "d.txt",
+      Source {
+        from: "a.txt",
+        to: "d.txt",
         create: true,
         exists: vec!["a.txt", "d.txt"],
       },
-      Path {
-        source: "b.txt",
-        destination: "e.txt",
+      Source {
+        from: "b.txt",
+        to: "e.txt",
         create: true,
         exists: vec!["b.txt", "e.txt"],
       },
-      Path {
-        source: "c.txt",
-        destination: "f.txt",
+      Source {
+        from: "c.txt",
+        to: "f.txt",
         create: true,
         exists: vec!["c.txt"],
       },
@@ -225,21 +228,21 @@ fn gives_error_for_existing_destinations() -> Result {
 fn forces_existing_destinations() -> Result {
   Test::new()?
     .sources(vec![
-      Path {
-        source: "a.txt",
-        destination: "d.txt",
+      Source {
+        from: "a.txt",
+        to: "d.txt",
         create: true,
         exists: vec!["d.txt"],
       },
-      Path {
-        source: "b.txt",
-        destination: "e.txt",
+      Source {
+        from: "b.txt",
+        to: "e.txt",
         create: true,
         exists: vec!["e.txt"],
       },
-      Path {
-        source: "c.txt",
-        destination: "f.txt",
+      Source {
+        from: "c.txt",
+        to: "f.txt",
         create: true,
         exists: vec!["f.txt"],
       },
@@ -262,21 +265,21 @@ fn forces_existing_destinations() -> Result {
 fn dry_run_works() -> Result {
   Test::new()?
     .sources(vec![
-      Path {
-        source: "a.txt",
-        destination: "d.txt",
+      Source {
+        from: "a.txt",
+        to: "d.txt",
         create: true,
         exists: vec!["a.txt"],
       },
-      Path {
-        source: "b.txt",
-        destination: "e.txt",
+      Source {
+        from: "b.txt",
+        to: "e.txt",
         create: true,
         exists: vec!["b.txt"],
       },
-      Path {
-        source: "c.txt",
-        destination: "f.txt",
+      Source {
+        from: "c.txt",
+        to: "f.txt",
         create: true,
         exists: vec!["c.txt"],
       },
@@ -298,15 +301,15 @@ fn dry_run_works() -> Result {
 fn errors_when_passed_invalid_sources() -> Result {
   Test::new()?
     .sources(vec![
-      Path {
-        source: "a.txt",
-        destination: "b.txt",
+      Source {
+        from: "a.txt",
+        to: "b.txt",
         create: false,
         exists: vec![],
       },
-      Path {
-        source: "c.txt",
-        destination: "b.txt",
+      Source {
+        from: "c.txt",
+        to: "b.txt",
         create: false,
         exists: vec![],
       },
@@ -324,27 +327,27 @@ fn errors_when_passed_invalid_sources() -> Result {
 fn disallow_duplicate_sources() -> Result {
   Test::new()?
     .sources(vec![
-      Path {
-        source: "a.txt",
-        destination: "c.txt",
+      Source {
+        from: "a.txt",
+        to: "c.txt",
         create: true,
         exists: vec!["a.txt"],
       },
-      Path {
-        source: "b.txt",
-        destination: "c.txt",
+      Source {
+        from: "b.txt",
+        to: "c.txt",
         create: true,
         exists: vec!["b.txt"],
       },
-      Path {
-        source: "e.txt",
-        destination: "f.txt",
+      Source {
+        from: "e.txt",
+        to: "f.txt",
         create: true,
         exists: vec!["e.txt"],
       },
-      Path {
-        source: "e.txt",
-        destination: "f.txt",
+      Source {
+        from: "e.txt",
+        to: "f.txt",
         create: true,
         exists: vec!["e.txt"],
       },
@@ -362,21 +365,21 @@ fn disallow_duplicate_sources() -> Result {
 fn handles_intermediate_conflicts() -> Result {
   Test::new()?
     .sources(vec![
-      Path {
-        source: "a.txt",
-        destination: "b.txt",
+      Source {
+        from: "a.txt",
+        to: "b.txt",
         create: true,
         exists: vec!["b.txt"],
       },
-      Path {
-        source: "b.txt",
-        destination: "c.txt",
+      Source {
+        from: "b.txt",
+        to: "c.txt",
         create: true,
         exists: vec!["c.txt", "b.txt"],
       },
-      Path {
-        source: "d.txt",
-        destination: "e.txt",
+      Source {
+        from: "d.txt",
+        to: "e.txt",
         create: true,
         exists: vec!["e.txt"],
       },
@@ -399,26 +402,25 @@ fn handles_intermediate_conflicts() -> Result {
 fn does_not_perform_self_renames() -> Result {
   Test::new()?
     .sources(vec![
-      Path {
-        source: "a.txt",
-        destination: "a.txt",
+      Source {
+        from: "a.txt",
+        to: "a.txt",
         create: true,
         exists: vec!["a.txt"],
       },
-      Path {
-        source: "b.txt",
-        destination: "b.txt",
+      Source {
+        from: "b.txt",
+        to: "b.txt",
         create: true,
         exists: vec!["b.txt"],
       },
-      Path {
-        source: "c.txt",
-        destination: "c.txt",
+      Source {
+        from: "c.txt",
+        to: "c.txt",
         create: true,
         exists: vec!["c.txt"],
       },
     ])
-    .argument("--force")
     .expected_status(0)
     .expected_stdout(
       "
@@ -432,15 +434,15 @@ fn does_not_perform_self_renames() -> Result {
 fn gives_error_for_invalid_destination_directory() -> Result {
   Test::new()?
     .sources(vec![
-      Path {
-        source: "a.txt",
-        destination: "foo/a.txt",
+      Source {
+        from: "a.txt",
+        to: "foo/a.txt",
         create: true,
         exists: vec!["a.txt"],
       },
-      Path {
-        source: "b.txt",
-        destination: "bar/baz/c.txt",
+      Source {
+        from: "b.txt",
+        to: "bar/baz/c.txt",
         create: true,
         exists: vec!["b.txt"],
       },
@@ -458,15 +460,15 @@ fn gives_error_for_invalid_destination_directory() -> Result {
 fn circular_rename() -> Result {
   Test::new()?
     .sources(vec![
-      Path {
-        source: "a.txt",
-        destination: "b.txt",
+      Source {
+        from: "a.txt",
+        to: "b.txt",
         create: true,
         exists: vec!["a.txt", "b.txt"],
       },
-      Path {
-        source: "b.txt",
-        destination: "a.txt",
+      Source {
+        from: "b.txt",
+        to: "a.txt",
         create: true,
         exists: vec!["b.txt", "a.txt"],
       },
@@ -479,6 +481,39 @@ fn circular_rename() -> Result {
       a.txt -> b.txt
       b.txt -> a.txt
       2 path(s) changed
+      ",
+    )
+    .run()
+}
+
+#[test]
+fn mixed_self_and_proper_renames() -> Result {
+  Test::new()?
+    .sources(vec![
+      Source {
+        from: "a.txt",
+        to: "a.txt",
+        create: true,
+        exists: vec!["a.txt"],
+      },
+      Source {
+        from: "b.txt",
+        to: "b.txt",
+        create: true,
+        exists: vec!["b.txt"],
+      },
+      Source {
+        from: "c.txt",
+        to: "d.txt",
+        create: true,
+        exists: vec!["d.txt"],
+      },
+    ])
+    .expected_status(0)
+    .expected_stdout(
+      "
+      c.txt -> d.txt
+      1 path(s) changed
       ",
     )
     .run()

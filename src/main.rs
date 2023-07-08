@@ -124,9 +124,17 @@ impl Arguments {
       );
     }
 
-    let existing = destinations
+    let pairs = self
+      .sources
       .iter()
-      .filter(|path| fs::metadata(path).is_ok())
+      .zip(destinations.iter())
+      .filter(|(source, destination)| source != destination)
+      .collect::<Vec<(&String, &String)>>();
+
+    let existing = pairs
+      .iter()
+      .filter(|(_, destination)| fs::metadata(destination).is_ok())
+      .map(|(_, destination)| destination.to_string())
       .collect::<Vec<_>>();
 
     if !self.force && !existing.is_empty() {
@@ -140,9 +148,13 @@ impl Arguments {
       );
     }
 
-    let absolutes = destinations
+    let absolutes = pairs
       .iter()
-      .map(|path| Path::new(path).absolutize().map_err(anyhow::Error::from))
+      .map(|(_, destination)| {
+        Path::new(destination)
+          .absolutize()
+          .map_err(anyhow::Error::from)
+      })
       .collect::<Result<Vec<_>>>()?;
 
     let par = absolutes
@@ -166,13 +178,6 @@ impl Arguments {
       );
     }
 
-    let pairs = self
-      .sources
-      .iter()
-      .zip(destinations.iter())
-      .filter(|(source, destination)| source != destination)
-      .collect::<Vec<(&String, &String)>>();
-
     let mut changed = 0;
 
     let intermediates = self.temp.then_some(
@@ -185,7 +190,7 @@ impl Arguments {
 
     match intermediates {
       Some(intermediates) => {
-        let zipped = pairs
+        let combined = pairs
           .iter()
           .zip(intermediates.iter())
           .map(|((source, destination), internal)| {
@@ -193,32 +198,38 @@ impl Arguments {
           })
           .collect::<Vec<_>>();
 
-        for (source, intermediate, _) in &zipped {
-          if !self.dry_run {
-            fs::rename(source, intermediate.path())?;
-          }
+        if !self.dry_run {
+          combined.iter().try_for_each(|(source, intermediate, _)| {
+            fs::rename(source, intermediate.path())
+          })?;
         }
 
-        for (source, intermediate, destination) in &zipped {
-          if !self.dry_run {
-            fs::rename(intermediate.path(), destination)?;
-            changed += 1;
-          }
+        combined.iter().try_for_each(
+          |(source, intermediate, destination)| -> Result {
+            if !self.dry_run {
+              fs::rename(intermediate.path(), destination)?;
+              changed += 1;
+            }
 
-          println!("{} -> {}", source, destination);
-        }
+            println!("{} -> {}", source, destination);
+
+            Ok(())
+          },
+        )
       }
-      None => {
-        for (source, destination) in pairs {
+      None => pairs
+        .iter()
+        .try_for_each(|(source, destination)| -> Result {
           if !self.dry_run {
             fs::rename(source, destination)?;
             changed += 1;
           }
 
           println!("{} -> {}", source, destination);
-        }
-      }
-    }
+
+          Ok(())
+        }),
+    }?;
 
     println!("{} path(s) changed", changed);
 
