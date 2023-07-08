@@ -553,6 +553,46 @@ fn mixed_self_and_proper_renames() -> Result {
 }
 
 #[test]
+fn place_file_into_directory() -> Result {
+  Test::new()?
+    .argument("--force")
+    .create(&[Path::File("a.txt"), Path::Directory("b")])?
+    .operations(&[Operation {
+      source: "a.txt",
+      destination: Some("b"),
+    }])
+    .exists(&["b", "b/a.txt"])
+    .expected_status(0)
+    .expected_stdout(
+      "
+      a.txt -> b/a.txt
+      1 path(s) changed
+      ",
+    )
+    .run()
+}
+
+#[test]
+fn place_directory_into_directory() -> Result {
+  Test::new()?
+    .argument("--force")
+    .create(&[Path::Directory("a"), Path::Directory("b")])?
+    .operations(&[Operation {
+      source: "a",
+      destination: Some("b"),
+    }])
+    .exists(&["b", "b/a"])
+    .expected_status(0)
+    .expected_stdout(
+      "
+      a -> b/a
+      1 path(s) changed
+      ",
+    )
+    .run()
+}
+
+#[test]
 fn destination_count_mismatch() -> Result {
   Test::new()?
     .create(&[Path::File("a.txt"), Path::File("b.txt")])?
@@ -571,26 +611,6 @@ fn destination_count_mismatch() -> Result {
     .expected_stderr(
       "
       error: Destination count mismatch, should be 2 but received 1
-      ",
-    )
-    .run()
-}
-
-#[test]
-fn place_file_into_directory() -> Result {
-  Test::new()?
-    .argument("--force")
-    .create(&[Path::File("a.txt"), Path::Directory("b")])?
-    .operations(&[Operation {
-      source: "a.txt",
-      destination: Some("b"),
-    }])
-    .exists(&["b", "b/a.txt"])
-    .expected_status(0)
-    .expected_stdout(
-      "
-      a.txt -> b/a.txt
-      1 path(s) changed
       ",
     )
     .run()
