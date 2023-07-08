@@ -13,19 +13,40 @@ use {
 
 type Result<T = (), E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
-struct Source<'a> {
-  from: &'a str,
-  to: Option<&'a str>,
-  create: bool,
-  exists: Vec<&'a str>,
+#[allow(dead_code)]
+enum Path<'a> {
+  File(&'a str),
+  Directory(&'a str),
+}
+
+impl Path<'_> {
+  fn create(&self, tempdir: &TempDir) -> Result {
+    match self {
+      Self::File(path) => {
+        File::create(tempdir.path().join(path))?;
+        Ok(())
+      }
+      Self::Directory(path) => {
+        fs::create_dir(tempdir.path().join(path))?;
+        Ok(())
+      }
+    }
+  }
+}
+
+#[derive(Clone)]
+struct Operation<'a> {
+  source: &'a str,
+  destination: Option<&'a str>,
 }
 
 struct Test<'a> {
   arguments: Vec<String>,
+  exists: Vec<&'a str>,
   expected_status: i32,
   expected_stderr: String,
   expected_stdout: String,
-  sources: Vec<Source<'a>>,
+  operations: Vec<Operation<'a>>,
   tempdir: TempDir,
 }
 
@@ -33,10 +54,11 @@ impl<'a> Test<'a> {
   fn new() -> Result<Self> {
     Ok(Self {
       arguments: Vec::new(),
+      exists: Vec::new(),
       expected_status: 0,
       expected_stderr: String::new(),
       expected_stdout: String::new(),
-      sources: Vec::new(),
+      operations: Vec::new(),
       tempdir: TempDir::new()?,
     })
   }
@@ -44,6 +66,13 @@ impl<'a> Test<'a> {
   fn argument(mut self, argument: &str) -> Self {
     self.arguments.push(argument.to_owned());
     self
+  }
+
+  fn exists(self, exists: &[&'a str]) -> Self {
+    Self {
+      exists: exists.to_vec(),
+      ..self
+    }
   }
 
   fn expected_status(self, expected_status: i32) -> Self {
@@ -67,12 +96,18 @@ impl<'a> Test<'a> {
     }
   }
 
-  fn sources(self, sources: Vec<Source<'a>>) -> Self {
-    Self { sources, ..self }
+  fn operations(self, operations: &[Operation<'a>]) -> Self {
+    Self {
+      operations: operations.to_vec(),
+      ..self
+    }
   }
 
-  fn create(self, path: &str) -> Result<Self> {
-    File::create(self.tempdir.path().join(path))?;
+  fn create(self, paths: &[Path]) -> Result<Self> {
+    paths
+      .iter()
+      .try_for_each(|path| path.create(&self.tempdir))?;
+
     Ok(self)
   }
 
@@ -83,15 +118,6 @@ impl<'a> Test<'a> {
   fn command(&self) -> Result<Command> {
     let mut command = Command::new(executable_path(env!("CARGO_PKG_NAME")));
 
-    self
-      .sources
-      .iter()
-      .filter(|path| path.create)
-      .try_for_each(|path| -> Result {
-        File::create(self.tempdir.path().join(path.from))?;
-        Ok(())
-      })?;
-
     let editor = self.tempdir.path().join("editor");
 
     fs::write(
@@ -99,9 +125,9 @@ impl<'a> Test<'a> {
       format!(
         "#!/bin/bash\necho -e \"{}\" > \"$1\"",
         self
-          .sources
+          .operations
           .iter()
-          .filter_map(|path| path.to)
+          .filter_map(|path| path.destination)
           .collect::<Vec<_>>()
           .join("\n")
       ),
@@ -111,7 +137,7 @@ impl<'a> Test<'a> {
 
     command
       .current_dir(&self.tempdir)
-      .args(self.sources.iter().map(|path| path.from))
+      .args(self.operations.iter().map(|path| path.source))
       .arg("--editor")
       .arg(editor)
       .args(&self.arguments);
@@ -134,39 +160,65 @@ impl<'a> Test<'a> {
 
     assert_eq!(str::from_utf8(&output.stdout)?, self.expected_stdout);
 
-    self
-      .sources
+    let sources = self
+      .operations
       .iter()
-      .flat_map(|path| path.exists.clone())
-      .for_each(|option| assert!(self.tempdir.path().join(option).exists()));
+      .map(|operation| operation.source)
+      .collect::<Vec<_>>();
+
+    let destinations = self
+      .operations
+      .iter()
+      .flat_map(|operation| operation.destination)
+      .collect::<Vec<_>>();
+
+    let combined = sources
+      .iter()
+      .chain(destinations.iter())
+      .collect::<Vec<_>>();
+
+    combined.iter().for_each(|path| {
+      assert_eq!(
+        self.exists.contains(path),
+        self.tempdir.path().join(path).exists()
+      );
+    });
+
+    self
+      .exists
+      .iter()
+      .filter(|path| !combined.contains(path))
+      .for_each(|path| {
+        assert!(self.tempdir.path().join(path).exists());
+      });
 
     Ok(self.tempdir)
   }
 }
 
 #[test]
-fn renames_non_existing_sources() -> Result {
+fn renames_non_existing_operations() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: Some("d.txt"),
-        create: true,
-        exists: vec!["d.txt"],
+    .create(&[
+      Path::File("a.txt"),
+      Path::File("b.txt"),
+      Path::File("c.txt"),
+    ])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("d.txt"),
       },
-      Source {
-        from: "b.txt",
-        to: Some("e.txt"),
-        create: true,
-        exists: vec!["e.txt"],
+      Operation {
+        source: "b.txt",
+        destination: Some("e.txt"),
       },
-      Source {
-        from: "c.txt",
-        to: Some("f.txt"),
-        create: true,
-        exists: vec!["f.txt"],
+      Operation {
+        source: "c.txt",
+        destination: Some("f.txt"),
       },
     ])
+    .exists(&["d.txt", "e.txt", "f.txt"])
     .expected_status(0)
     .expected_stdout(
       "
@@ -182,28 +234,28 @@ fn renames_non_existing_sources() -> Result {
 #[test]
 fn gives_error_for_existing_destinations() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: Some("d.txt"),
-        create: true,
-        exists: vec!["a.txt", "d.txt"],
+    .create(&[
+      Path::File("a.txt"),
+      Path::File("b.txt"),
+      Path::File("c.txt"),
+      Path::File("d.txt"),
+      Path::File("e.txt")
+    ])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("d.txt"),
       },
-      Source {
-        from: "b.txt",
-        to: Some("e.txt"),
-        create: true,
-        exists: vec!["b.txt", "e.txt"],
+      Operation {
+        source: "b.txt",
+        destination: Some("e.txt"),
       },
-      Source {
-        from: "c.txt",
-        to: Some("f.txt"),
-        create: true,
-        exists: vec!["c.txt"],
+      Operation {
+        source: "c.txt",
+        destination: Some("f.txt"),
       },
     ])
-    .create("d.txt")?
-    .create("e.txt")?
+    .exists(&["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"])
     .expected_status(1)
     .expected_stderr(
       "
@@ -216,28 +268,28 @@ fn gives_error_for_existing_destinations() -> Result {
 #[test]
 fn forces_existing_destinations() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: Some("d.txt"),
-        create: true,
-        exists: vec!["d.txt"],
+    .argument("--force")
+    .create(&[
+      Path::File("a.txt"),
+      Path::File("b.txt"),
+      Path::File("c.txt"),
+      Path::File("d.txt"),
+    ])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("d.txt"),
       },
-      Source {
-        from: "b.txt",
-        to: Some("e.txt"),
-        create: true,
-        exists: vec!["e.txt"],
+      Operation {
+        source: "b.txt",
+        destination: Some("e.txt"),
       },
-      Source {
-        from: "c.txt",
-        to: Some("f.txt"),
-        create: true,
-        exists: vec!["f.txt"],
+      Operation {
+        source: "c.txt",
+        destination: Some("f.txt"),
       },
     ])
-    .argument("--force")
-    .create("d.txt")?
+    .exists(&["d.txt", "e.txt", "f.txt"])
     .expected_status(0)
     .expected_stdout(
       "
@@ -253,27 +305,27 @@ fn forces_existing_destinations() -> Result {
 #[test]
 fn dry_run_works() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: Some("d.txt"),
-        create: true,
-        exists: vec!["a.txt"],
+    .argument("--dry-run")
+    .create(&[
+      Path::File("a.txt"),
+      Path::File("b.txt"),
+      Path::File("c.txt"),
+    ])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("d.txt"),
       },
-      Source {
-        from: "b.txt",
-        to: Some("e.txt"),
-        create: true,
-        exists: vec!["b.txt"],
+      Operation {
+        source: "b.txt",
+        destination: Some("e.txt"),
       },
-      Source {
-        from: "c.txt",
-        to: Some("f.txt"),
-        create: true,
-        exists: vec!["c.txt"],
+      Operation {
+        source: "c.txt",
+        destination: Some("f.txt"),
       },
     ])
-    .argument("--dry-run")
+    .exists(&["a.txt", "b.txt", "c.txt"])
     .expected_status(0)
     .expected_stdout(
       "
@@ -287,20 +339,16 @@ fn dry_run_works() -> Result {
 }
 
 #[test]
-fn errors_when_passed_invalid_sources() -> Result {
+fn errors_when_passed_invalid_operations() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: Some("b.txt"),
-        create: false,
-        exists: vec![],
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("b.txt"),
       },
-      Source {
-        from: "c.txt",
-        to: Some("b.txt"),
-        create: false,
-        exists: vec![],
+      Operation {
+        source: "c.txt",
+        destination: Some("b.txt"),
       },
     ])
     .expected_status(1)
@@ -313,34 +361,32 @@ fn errors_when_passed_invalid_sources() -> Result {
 }
 
 #[test]
-fn disallow_duplicate_sources() -> Result {
+fn disallow_duplicate_operations() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: Some("c.txt"),
-        create: true,
-        exists: vec!["a.txt"],
+    .create(&[
+      Path::File("a.txt"),
+      Path::File("b.txt"),
+      Path::File("e.txt"),
+    ])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("c.txt"),
       },
-      Source {
-        from: "b.txt",
-        to: Some("c.txt"),
-        create: true,
-        exists: vec!["b.txt"],
+      Operation {
+        source: "b.txt",
+        destination: Some("c.txt"),
       },
-      Source {
-        from: "e.txt",
-        to: Some("f.txt"),
-        create: true,
-        exists: vec!["e.txt"],
+      Operation {
+        source: "e.txt",
+        destination: Some("f.txt"),
       },
-      Source {
-        from: "e.txt",
-        to: Some("f.txt"),
-        create: true,
-        exists: vec!["e.txt"],
+      Operation {
+        source: "e.txt",
+        destination: Some("f.txt"),
       },
     ])
+    .exists(&["a.txt", "b.txt", "e.txt"])
     .expected_status(1)
     .expected_stderr(
       "
@@ -353,28 +399,28 @@ fn disallow_duplicate_sources() -> Result {
 #[test]
 fn handles_intermediate_conflicts() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: Some("b.txt"),
-        create: true,
-        exists: vec!["b.txt"],
-      },
-      Source {
-        from: "b.txt",
-        to: Some("c.txt"),
-        create: true,
-        exists: vec!["c.txt", "b.txt"],
-      },
-      Source {
-        from: "d.txt",
-        to: Some("e.txt"),
-        create: true,
-        exists: vec!["e.txt"],
-      },
-    ])
     .argument("--force")
     .argument("--resolve")
+    .create(&[
+      Path::File("a.txt"),
+      Path::File("b.txt"),
+      Path::File("d.txt"),
+    ])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("b.txt"),
+      },
+      Operation {
+        source: "b.txt",
+        destination: Some("c.txt"),
+      },
+      Operation {
+        source: "d.txt",
+        destination: Some("e.txt"),
+      },
+    ])
+    .exists(&["b.txt", "c.txt", "e.txt"])
     .expected_status(0)
     .expected_stdout(
       "
@@ -390,26 +436,26 @@ fn handles_intermediate_conflicts() -> Result {
 #[test]
 fn does_not_perform_self_renames() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: Some("a.txt"),
-        create: true,
-        exists: vec!["a.txt"],
+    .create(&[
+      Path::File("a.txt"),
+      Path::File("b.txt"),
+      Path::File("c.txt"),
+    ])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("a.txt"),
       },
-      Source {
-        from: "b.txt",
-        to: Some("b.txt"),
-        create: true,
-        exists: vec!["b.txt"],
+      Operation {
+        source: "b.txt",
+        destination: Some("b.txt"),
       },
-      Source {
-        from: "c.txt",
-        to: Some("c.txt"),
-        create: true,
-        exists: vec!["c.txt"],
+      Operation {
+        source: "c.txt",
+        destination: Some("c.txt"),
       },
     ])
+    .exists(&["a.txt", "b.txt", "c.txt"])
     .expected_status(0)
     .expected_stdout(
       "
@@ -422,20 +468,21 @@ fn does_not_perform_self_renames() -> Result {
 #[test]
 fn gives_error_for_invalid_destination_directory() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: Some("foo/a.txt"),
-        create: true,
-        exists: vec!["a.txt"],
+    .create(&[
+      Path::File("a.txt"),
+      Path::File("b.txt"),
+    ])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("foo/a.txt"),
       },
-      Source {
-        from: "b.txt",
-        to: Some("bar/baz/c.txt"),
-        create: true,
-        exists: vec!["b.txt"],
+      Operation {
+        source: "b.txt",
+        destination: Some("bar/baz/c.txt"),
       },
     ])
+    .exists(&["a.txt", "b.txt"])
     .expected_status(1)
     .expected_stderr(
       "
@@ -448,22 +495,20 @@ fn gives_error_for_invalid_destination_directory() -> Result {
 #[test]
 fn circular_rename() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: Some("b.txt"),
-        create: true,
-        exists: vec!["a.txt", "b.txt"],
-      },
-      Source {
-        from: "b.txt",
-        to: Some("a.txt"),
-        create: true,
-        exists: vec!["b.txt", "a.txt"],
-      },
-    ])
     .argument("--force")
     .argument("--resolve")
+    .create(&[Path::File("a.txt"), Path::File("b.txt")])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("b.txt"),
+      },
+      Operation {
+        source: "b.txt",
+        destination: Some("a.txt"),
+      },
+    ])
+    .exists(&["a.txt", "b.txt"])
     .expected_status(0)
     .expected_stdout(
       "
@@ -478,26 +523,26 @@ fn circular_rename() -> Result {
 #[test]
 fn mixed_self_and_proper_renames() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: Some("a.txt"),
-        create: true,
-        exists: vec!["a.txt"],
+    .create(&[
+      Path::File("a.txt"),
+      Path::File("b.txt"),
+      Path::File("c.txt"),
+    ])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("a.txt"),
       },
-      Source {
-        from: "b.txt",
-        to: Some("b.txt"),
-        create: true,
-        exists: vec!["b.txt"],
+      Operation {
+        source: "b.txt",
+        destination: Some("b.txt"),
       },
-      Source {
-        from: "c.txt",
-        to: Some("d.txt"),
-        create: true,
-        exists: vec!["d.txt"],
+      Operation {
+        source: "c.txt",
+        destination: Some("d.txt"),
       },
     ])
+    .exists(&["a.txt", "b.txt", "d.txt"])
     .expected_status(0)
     .expected_stdout(
       "
@@ -511,20 +556,18 @@ fn mixed_self_and_proper_renames() -> Result {
 #[test]
 fn destination_count_mismatch() -> Result {
   Test::new()?
-    .sources(vec![
-      Source {
-        from: "a.txt",
-        to: None,
-        create: true,
-        exists: vec!["a.txt"],
+    .create(&[Path::File("a.txt"), Path::File("b.txt")])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: None,
       },
-      Source {
-        from: "b.txt",
-        to: Some("c.txt"),
-        create: true,
-        exists: vec!["b.txt"],
+      Operation {
+        source: "b.txt",
+        destination: Some("c.txt"),
       },
     ])
+    .exists(&["a.txt", "b.txt"])
     .expected_status(1)
     .expected_stderr(
       "
