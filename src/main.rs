@@ -38,6 +38,19 @@ impl Intermediate {
   }
 }
 
+trait PathBufExt {
+  fn with(self, source: &str) -> Self;
+}
+
+impl PathBufExt for PathBuf {
+  fn with(self, source: &str) -> Self {
+    match self.is_dir() {
+      true => self.join(source),
+      _ => self,
+    }
+  }
+}
+
 #[derive(Debug, Parser)]
 #[command(about, author, version)]
 struct Arguments {
@@ -202,12 +215,14 @@ impl Arguments {
 
         combined.iter().try_for_each(
           |(source, intermediate, destination)| -> Result {
+            let destination = PathBuf::from(destination).with(source);
+
             if !self.dry_run {
-              fs::rename(intermediate.path(), destination)?;
+              fs::rename(intermediate.path(), &destination)?;
               changed += 1;
             }
 
-            println!("{} -> {}", source, destination);
+            println!("{source} -> {}", destination.display());
 
             Ok(())
           },
@@ -216,12 +231,14 @@ impl Arguments {
       None => pairs
         .iter()
         .try_for_each(|(source, destination)| -> Result {
+          let destination = PathBuf::from(destination).with(source);
+
           if !self.dry_run {
-            fs::rename(source, destination)?;
+            fs::rename(source, &destination)?;
             changed += 1;
           }
 
-          println!("{} -> {}", source, destination);
+          println!("{source} -> {}", destination.display());
 
           Ok(())
         }),

@@ -13,7 +13,6 @@ use {
 
 type Result<T = (), E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
-#[allow(dead_code)]
 enum Path<'a> {
   File(&'a str),
   Directory(&'a str),
@@ -572,6 +571,26 @@ fn destination_count_mismatch() -> Result {
     .expected_stderr(
       "
       error: Destination count mismatch, should be 2 but received 1
+      ",
+    )
+    .run()
+}
+
+#[test]
+fn place_file_into_directory() -> Result {
+  Test::new()?
+    .argument("--force")
+    .create(&[Path::File("a.txt"), Path::Directory("b")])?
+    .operations(&[Operation {
+      source: "a.txt",
+      destination: Some("b"),
+    }])
+    .exists(&["b", "b/a.txt"])
+    .expected_status(0)
+    .expected_stdout(
+      "
+      a.txt -> b/a.txt
+      1 path(s) changed
       ",
     )
     .run()
