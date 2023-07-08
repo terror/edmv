@@ -35,18 +35,18 @@ Arguments:
 Options:
       --editor <EDITOR>  Editor command to use
       --force            Overwrite existing files
-      --temp             Rename sources to intermediate temporary files internally
+      --resolve          Resolve conflicting renames
       --dry-run          Run without making any changes
   -h, --help             Print help
   -V, --version          Print version
 ```
 
-An option of note is the `--temp` option, this applies to sources an
+An option of note is the `--resolve` option, this applies to sources an
 intermediate rename to either a temporary directory or file - automatically
 handling conflicts such as overlapping or circular renames.
 
 ### Prior Art
 
-**edmv** is a tested and improved re-implementation of
-[Casey's](https://github.com/casey) implementation in
+**edmv** is a tested and extended re-implementation of
+the version [Casey](https://github.com/casey) wrote in
 [Python](https://github.com/casey/edmv), do check it out!

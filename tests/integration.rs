@@ -385,7 +385,7 @@ fn handles_intermediate_conflicts() -> Result {
       },
     ])
     .argument("--force")
-    .argument("--temp")
+    .argument("--resolve")
     .expected_status(0)
     .expected_stdout(
       "
@@ -474,7 +474,7 @@ fn circular_rename() -> Result {
       },
     ])
     .argument("--force")
-    .argument("--temp")
+    .argument("--resolve")
     .expected_status(0)
     .expected_stdout(
       "

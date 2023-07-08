@@ -46,11 +46,8 @@ struct Arguments {
   editor: Option<String>,
   #[clap(long, help = "Overwrite existing files")]
   force: bool,
-  #[clap(
-    long,
-    help = "Rename sources to intermediate temporary files internally"
-  )]
-  temp: bool,
+  #[clap(long, help = "Resolve conflicting renames")]
+  resolve: bool,
   #[clap(long, help = "Run without making any changes")]
   dry_run: bool,
   #[clap(name = "sources", help = "Paths to edit")]
@@ -180,7 +177,7 @@ impl Arguments {
 
     let mut changed = 0;
 
-    let intermediates = self.temp.then_some(
+    let intermediates = self.resolve.then_some(
       self
         .sources
         .iter()
