@@ -196,7 +196,7 @@ impl<'a> Test<'a> {
 }
 
 #[test]
-fn renames_non_existing_operations() -> Result {
+fn renames_to_non_existing_file_destinations() -> Result {
   Test::new()?
     .create(&[
       Path::File("a.txt"),
@@ -224,6 +224,41 @@ fn renames_non_existing_operations() -> Result {
       a.txt -> d.txt
       b.txt -> e.txt
       c.txt -> f.txt
+      3 path(s) changed
+      ",
+    )
+    .run()
+}
+
+#[test]
+fn renames_to_non_existent_directory_destinations() -> Result {
+  Test::new()?
+    .create(&[
+      Path::Directory("a"),
+      Path::Directory("b"),
+      Path::Directory("c"),
+    ])?
+    .operations(&[
+      Operation {
+        source: "a",
+        destination: Some("d"),
+      },
+      Operation {
+        source: "b",
+        destination: Some("e"),
+      },
+      Operation {
+        source: "c",
+        destination: Some("f"),
+      },
+    ])
+    .exists(&["d", "e", "f"])
+    .expected_status(0)
+    .expected_stdout(
+      "
+      a -> d
+      b -> e
+      c -> f
       3 path(s) changed
       ",
     )
