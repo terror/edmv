@@ -16,7 +16,11 @@ jobs:
   all:
     name: All
 
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v2
@@ -24,8 +28,7 @@ jobs:
       - name: Download actionlint
         id: actionlint
         run:
-          bash <(curl
-          https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
 
       - name: Check workflow
         run: ${{ steps.actionlint.outputs.executable }} -color
@@ -45,9 +48,17 @@ jobs:
           cargo --version
           cargo clippy --version
 
+      - name: Install ripgrep
+        run: |
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            sudo apt-get update
+            sudo apt-get install -y ripgrep
+          else
+            brew install ripgrep
+          fi
+
       - name: Forbid
         run: |
-          brew install ripgrep
           ./bin/forbid
 
       - name: Build
