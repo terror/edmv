@@ -160,42 +160,37 @@ impl Arguments {
       );
     }
 
-    let dir_to_file = pairs
-      .iter()
-      .filter(|(source, destination)| source.is_dir() && destination.is_file())
-      .map(|(source, destination)| (source, destination))
-      .collect::<Vec<_>>();
+    let map = pairs.iter().cloned().collect::<HashMap<PathBuf, PathBuf>>();
 
-    if !dir_to_file.is_empty() {
-      bail!(
-        "Found directory to file operation(s): {}",
-        dir_to_file
-          .iter()
-          .map(|(source, destination)| {
-            format!("{} -> {}", source.display(), destination.display())
-          })
-          .collect::<Vec<String>>()
-          .join(", ")
-      );
-    }
-
-    let map = self
-      .sources
-      .iter()
-      .zip(destinations.iter())
-      .filter(|(source, destination)| source != destination)
-      .collect::<HashMap<&String, &String>>();
-
-    let conflicting = map
+    let mut conflicting = map
       .iter()
       .filter(|(_, destination)| map.contains_key(destination.to_owned()))
-      .map(|(source, destination)| format!("{} -> {}", source, destination))
+      .map(|(source, destination)| {
+        format!("{} -> {}", source.display(), destination.display())
+      })
       .collect::<Vec<String>>();
+
+    conflicting.sort();
 
     if !conflicting.is_empty() && !self.resolve {
       bail!(
         "Found conflicting operation(s): {}, use --resolve to properly handle the conflicts",
         conflicting.join(", ")
+      );
+    }
+
+    let dir_to_file = pairs
+      .iter()
+      .filter(|(source, destination)| source.is_dir() && destination.is_file())
+      .map(|(source, destination)| {
+        format!("{} -> {}", source.display(), destination.display())
+      })
+      .collect::<Vec<_>>();
+
+    if !dir_to_file.is_empty() {
+      bail!(
+        "Found directory to file operation(s): {}",
+        dir_to_file.join(", ")
       );
     }
 
