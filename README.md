@@ -1,5 +1,7 @@
 ## edmv 📦
 
+[![CI](https://github.com/terror/edmv/actions/workflows/ci.yml/badge.svg)](https://github.com/terror/edmv/actions/workflows/ci.yml)
+
 **edmv** is a tool that lets you bulk rename files fast using your preferred
 text editor.
 
