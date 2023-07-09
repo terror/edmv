@@ -3,6 +3,12 @@
 **edmv** is a tool that lets you bulk rename files fast using your preferred
 text editor.
 
+### Demo
+
+Below is a short demo showcasing the main functionality of the program:
+
+[![asciicast](https://asciinema.org/a/33OVZX9m1PZcyqYvdqmtvBRRv.svg)](https://asciinema.org/a/33OVZX9m1PZcyqYvdqmtvBRRv)
+
 ### Installation
 
 You can install the **edmv** command-line utility via the rust package manager
