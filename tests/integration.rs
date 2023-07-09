@@ -650,3 +650,33 @@ fn destination_count_mismatch() -> Result {
     )
     .run()
 }
+
+#[test]
+fn gives_error_for_directory_to_file_operations() -> Result {
+  Test::new()?
+    .argument("--force")
+    .create(&[
+      Path::Directory("a"),
+      Path::Directory("b"),
+      Path::File("a.txt"),
+      Path::File("b.txt"),
+    ])?
+    .operations(&[
+      Operation {
+        source: "a",
+        destination: Some("a.txt"),
+      },
+      Operation {
+        source: "b",
+        destination: Some("b.txt"),
+      },
+    ])
+    .exists(&["a", "b", "a.txt", "b.txt"])
+    .expected_status(1)
+    .expected_stderr(
+      "
+      error: Found directory to file operation(s): a -> a.txt, b -> b.txt
+      ",
+    )
+    .run()
+}

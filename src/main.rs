@@ -39,14 +39,14 @@ impl Intermediate {
 }
 
 trait PathBufExt {
-  fn with(self, source: &str) -> Self;
+  fn with(&self, source: &Path) -> Self;
 }
 
 impl PathBufExt for PathBuf {
-  fn with(self, source: &str) -> Self {
+  fn with(&self, source: &Path) -> Self {
     match self.is_dir() {
       true => self.join(source),
-      _ => self,
+      _ => self.to_path_buf(),
     }
   }
 }
@@ -138,12 +138,34 @@ impl Arguments {
       .iter()
       .zip(destinations.iter())
       .filter(|(source, destination)| source != destination)
-      .collect::<Vec<(&String, &String)>>();
+      .map(|(source, destination)| {
+        (PathBuf::from(source), PathBuf::from(destination))
+      })
+      .collect::<Vec<(PathBuf, PathBuf)>>();
+
+    let dir_to_file = pairs
+      .iter()
+      .filter(|(source, destination)| source.is_dir() && destination.is_file())
+      .map(|(source, destination)| (source, destination))
+      .collect::<Vec<_>>();
+
+    if !dir_to_file.is_empty() {
+      bail!(
+        "Found directory to file operation(s): {}",
+        dir_to_file
+          .iter()
+          .map(|(source, destination)| {
+            format!("{} -> {}", source.display(), destination.display())
+          })
+          .collect::<Vec<String>>()
+          .join(", ")
+      );
+    }
 
     let existing = pairs
       .iter()
       .filter(|(_, destination)| fs::metadata(destination).is_ok())
-      .map(|(_, destination)| destination.to_string())
+      .map(|(_, destination)| destination.display())
       .collect::<Vec<_>>();
 
     if !self.force && !existing.is_empty() {
@@ -160,9 +182,7 @@ impl Arguments {
     let absolutes = pairs
       .iter()
       .map(|(_, destination)| {
-        Path::new(destination)
-          .absolutize()
-          .map_err(anyhow::Error::from)
+        destination.absolutize().map_err(anyhow::Error::from)
       })
       .collect::<Result<Vec<_>>>()?;
 
@@ -203,7 +223,7 @@ impl Arguments {
           .iter()
           .zip(intermediates.iter())
           .map(|((source, destination), intermediate)| {
-            (*source, intermediate, *destination)
+            (source, intermediate, destination)
           })
           .collect::<Vec<_>>();
 
@@ -215,14 +235,14 @@ impl Arguments {
 
         combined.iter().try_for_each(
           |(source, intermediate, destination)| -> Result {
-            let destination = PathBuf::from(destination).with(source);
+            let destination = destination.with(source);
 
             if !self.dry_run {
               fs::rename(intermediate.path(), &destination)?;
               changed += 1;
             }
 
-            println!("{source} -> {}", destination.display());
+            println!("{} -> {}", source.display(), destination.display());
 
             Ok(())
           },
@@ -231,20 +251,20 @@ impl Arguments {
       None => pairs
         .iter()
         .try_for_each(|(source, destination)| -> Result {
-          let destination = PathBuf::from(destination).with(source);
+          let destination = destination.with(source);
 
           if !self.dry_run {
             fs::rename(source, &destination)?;
             changed += 1;
           }
 
-          println!("{source} -> {}", destination.display());
+          println!("{} -> {}", source.display(), destination.display());
 
           Ok(())
         }),
     }?;
 
-    println!("{} path(s) changed", changed);
+    println!("{changed} path(s) changed");
 
     Ok(())
   }
