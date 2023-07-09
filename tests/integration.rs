@@ -680,3 +680,28 @@ fn gives_error_for_directory_to_file_operations() -> Result {
     )
     .run()
 }
+
+#[test]
+fn detects_conflicts() -> Result {
+  Test::new()?
+    .argument("--force")
+    .create(&[Path::File("a.txt"), Path::File("b.txt")])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("b.txt"),
+      },
+      Operation {
+        source: "b.txt",
+        destination: Some("a.txt"),
+      },
+    ])
+    .exists(&["a.txt", "b.txt"])
+    .expected_status(1)
+    .expected_stderr(
+      "
+      error: Found conflicting operation(s): a.txt -> b.txt, b.txt -> a.txt, use --resolve to properly handle the conflicts
+      ",
+    )
+    .run()
+}

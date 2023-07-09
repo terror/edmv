@@ -143,6 +143,23 @@ impl Arguments {
       })
       .collect::<Vec<(PathBuf, PathBuf)>>();
 
+    let existing = pairs
+      .iter()
+      .filter(|(_, destination)| fs::metadata(destination).is_ok())
+      .map(|(_, destination)| destination.display())
+      .collect::<Vec<_>>();
+
+    if !self.force && !existing.is_empty() {
+      bail!(
+        "Found destination(s) that already exist: {}, use --force to overwrite",
+        existing
+          .iter()
+          .map(|path| path.to_string())
+          .collect::<Vec<String>>()
+          .join(", ")
+      );
+    }
+
     let dir_to_file = pairs
       .iter()
       .filter(|(source, destination)| source.is_dir() && destination.is_file())
@@ -162,20 +179,23 @@ impl Arguments {
       );
     }
 
-    let existing = pairs
+    let map = self
+      .sources
       .iter()
-      .filter(|(_, destination)| fs::metadata(destination).is_ok())
-      .map(|(_, destination)| destination.display())
-      .collect::<Vec<_>>();
+      .zip(destinations.iter())
+      .filter(|(source, destination)| source != destination)
+      .collect::<HashMap<&String, &String>>();
 
-    if !self.force && !existing.is_empty() {
+    let conflicting = map
+      .iter()
+      .filter(|(_, destination)| map.contains_key(destination.to_owned()))
+      .map(|(source, destination)| format!("{} -> {}", source, destination))
+      .collect::<Vec<String>>();
+
+    if !conflicting.is_empty() && !self.resolve {
       bail!(
-        "Found destination(s) that already exist: {}, use --force to overwrite",
-        existing
-          .iter()
-          .map(|path| path.to_string())
-          .collect::<Vec<String>>()
-          .join(", ")
+        "Found conflicting operation(s): {}, use --resolve to properly handle the conflicts",
+        conflicting.join(", ")
       );
     }
 
