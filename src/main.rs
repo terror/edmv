@@ -68,9 +68,10 @@ struct Arguments {
 
 impl Arguments {
   fn run(self) -> Result {
-    let editor = self
-      .editor
-      .unwrap_or(env::var("EDITOR").unwrap_or("vi".to_string()));
+    let editor = self.editor.unwrap_or(
+      env::var("EDMV_EDITOR")
+        .unwrap_or(env::var("EDITOR").unwrap_or("vi".to_string())),
+    );
 
     let absent = self
       .sources
