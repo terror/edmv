@@ -233,54 +233,61 @@ impl Arguments {
         .collect::<Result<Vec<_>>>()?,
     );
 
-    match intermediates {
-      Some(intermediates) => {
-        let combined = pairs
+    let transform = |input: Vec<Vec<PathBuf>>| -> Vec<Vec<(PathBuf, PathBuf)>> {
+      (0..input.iter().map(|inner| inner.len() - 1).min().unwrap_or(0))
+        .map(|i| {
+          input
+            .iter()
+            .filter_map(|inner| inner.windows(2).nth(i))
+            .map(|chunk| (chunk[0].clone(), chunk[1].clone()))
+            .collect()
+        })
+        .collect()
+    };
+
+    let mut rename = |pipeline: Vec<Vec<(PathBuf, PathBuf)>>| -> Result {
+      let first = pipeline.first().unwrap_or(&Vec::new()).clone();
+
+      pipeline.iter().enumerate().try_for_each(|(i, stage)| {
+        stage
           .iter()
-          .zip(intermediates.iter())
-          .map(|((source, destination), intermediate)| {
-            (source, intermediate, destination)
-          })
-          .collect::<Vec<_>>();
-
-        if !self.dry_run {
-          combined.iter().try_for_each(|(source, intermediate, _)| {
-            fs::rename(source, intermediate.path())
-          })?;
-        }
-
-        combined.iter().try_for_each(
-          |(source, intermediate, destination)| -> Result {
+          .enumerate()
+          .try_for_each(|(j, (source, destination))| {
             let destination = destination.with(source);
 
             if !self.dry_run {
-              fs::rename(intermediate.path(), &destination)?;
-              changed += 1;
+              fs::rename(source, &destination)?;
             }
 
-            println!("{} -> {}", source.display(), destination.display());
+            if i == pipeline.len() - 1 && j < first.len() {
+              println!("{} -> {}", first[j].0.display(), destination.display());
+              changed += !self.dry_run as usize;
+            }
 
             Ok(())
-          },
-        )
-      }
-      None => pairs
-        .iter()
-        .try_for_each(|(source, destination)| -> Result {
-          let destination = destination.with(source);
+          })
+      })
+    };
 
-          if !self.dry_run {
-            fs::rename(source, &destination)?;
-            changed += 1;
-          }
+    match intermediates {
+      Some(intermediates) => rename(transform(
+        pairs
+          .into_iter()
+          .zip(intermediates.iter())
+          .map(|((source, destination), intermediate)| {
+            vec![source, intermediate.path().to_path_buf(), destination]
+          })
+          .collect(),
+      ))?,
+      None => rename(transform(
+        pairs
+          .into_iter()
+          .map(|(source, destination)| vec![source, destination])
+          .collect(),
+      ))?,
+    }
 
-          println!("{} -> {}", source.display(), destination.display());
-
-          Ok(())
-        }),
-    }?;
-
-    println!("{changed} path(s) changed");
+    println!("{changed} path(s) changed",);
 
     Ok(())
   }
