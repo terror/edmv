@@ -28,6 +28,9 @@ cd edmv
 cargo install --path .
 ```
 
+...or you can download one of the pre-built binaries from the
+[releases](https://github.com/terror/edmv/releases) page.
+
 ### Usage
 
 Below is the output of `edmv --help`:
