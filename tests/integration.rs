@@ -26,7 +26,7 @@ impl Path<'_> {
         Ok(())
       }
       Self::Directory(path) => {
-        fs::create_dir(tempdir.path().join(path))?;
+        fs::create_dir_all(tempdir.path().join(path))?;
         Ok(())
       }
     }
@@ -701,6 +701,26 @@ fn detects_conflicts() -> Result {
     .expected_stderr(
       "
       error: Found conflicting operation(s): a.txt -> b.txt, b.txt -> a.txt, use --resolve to properly handle the conflicts
+      ",
+    )
+    .run()
+}
+
+#[test]
+fn nested_directory() -> Result {
+  Test::new()?
+    .argument("--force")
+    .create(&[Path::Directory("foo/bar/baz"), Path::File("a.txt")])?
+    .operations(&[Operation {
+      source: "a.txt",
+      destination: Some("foo/bar/baz"),
+    }])
+    .exists(&["foo/bar/baz", "foo/bar/baz/a.txt"])
+    .expected_status(0)
+    .expected_stdout(
+      "
+      a.txt -> foo/bar/baz/a.txt
+      1 path(s) changed
       ",
     )
     .run()
