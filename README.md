@@ -1,6 +1,7 @@
 ## edmv 📦
 
 [![CI](https://github.com/terror/edmv/actions/workflows/ci.yml/badge.svg)](https://github.com/terror/edmv/actions/workflows/ci.yml)
+[![crates.io](https://shields.io/crates/v/edmv.svg)](https://crates.io/crates/edmv)
 
 **edmv** is a tool that lets you bulk rename files fast using your preferred
 text editor.
@@ -30,6 +31,7 @@ cargo install --path .
 
 ...or you can download one of the pre-built binaries from the
 [releases](https://github.com/terror/edmv/releases) page.
+
 
 ### Usage
 
