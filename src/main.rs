@@ -1,5 +1,5 @@
 use {
-  anyhow::bail,
+  anyhow::{anyhow, bail},
   clap::Parser,
   path_absolutize::*,
   std::{
@@ -39,10 +39,20 @@ impl Intermediate {
 }
 
 trait PathBufExt {
+  fn to_string(&self) -> Result<String>;
   fn with(&self, source: &Path) -> Self;
 }
 
 impl PathBufExt for PathBuf {
+  fn to_string(&self) -> Result<String> {
+    Ok(
+      self
+        .to_str()
+        .ok_or(anyhow!("Failed to convert path to string"))?
+        .to_string(),
+    )
+  }
+
   fn with(&self, source: &Path) -> Self {
     match self.is_dir() {
       true => self.join(source),
@@ -111,9 +121,19 @@ impl Arguments {
       );
     }
 
-    let mut duplicates = destinations
+    let pairs = self
+      .sources
       .iter()
-      .fold(HashMap::new(), |mut acc, v| {
+      .zip(destinations.iter())
+      .filter(|(source, destination)| source != destination)
+      .map(|(source, destination)| {
+        (PathBuf::from(source), PathBuf::from(destination))
+      })
+      .collect::<Vec<(PathBuf, PathBuf)>>();
+
+    let mut duplicates = pairs
+      .iter()
+      .fold(HashMap::new(), |mut acc, (_, v)| {
         *acc.entry(v).or_insert(0) += 1;
         acc
       })
@@ -129,20 +149,10 @@ impl Arguments {
         duplicates
           .iter()
           .map(|(path, _)| path.to_string())
-          .collect::<Vec<String>>()
+          .collect::<Result<Vec<String>>>()?
           .join(", ")
       );
     }
-
-    let pairs = self
-      .sources
-      .iter()
-      .zip(destinations.iter())
-      .filter(|(source, destination)| source != destination)
-      .map(|(source, destination)| {
-        (PathBuf::from(source), PathBuf::from(destination))
-      })
-      .collect::<Vec<(PathBuf, PathBuf)>>();
 
     let existing = pairs
       .iter()

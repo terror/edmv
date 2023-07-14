@@ -725,3 +725,29 @@ fn nested_directory() -> Result {
     )
     .run()
 }
+
+#[test]
+fn ignores_self_renames_as_duplicates() -> Result {
+  Test::new()?
+    .argument("--force")
+    .create(&[Path::File("a.txt"), Path::File("b.txt")])?
+    .operations(&[
+      Operation {
+        source: "a.txt",
+        destination: Some("b.txt"),
+      },
+      Operation {
+        source: "b.txt",
+        destination: Some("b.txt"),
+      },
+    ])
+    .exists(&["b.txt"])
+    .expected_status(0)
+    .expected_stdout(
+      "
+      a.txt -> b.txt
+      1 path(s) changed
+      ",
+    )
+    .run()
+}
