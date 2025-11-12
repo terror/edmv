@@ -2,6 +2,7 @@
 
 [![release](https://img.shields.io/github/release/terror/edmv.svg?label=release&style=flat&labelColor=282c34&logo=github)](https://github.com/terror/edmv/releases/latest)
 [![CI](https://github.com/terror/edmv/actions/workflows/ci.yaml/badge.svg)](https://github.com/terror/edmv/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/terror/edmv/graph/badge.svg?token=7CH4XDXO7Z)](https://codecov.io/gh/terror/edmv)
 [![crates.io](https://shields.io/crates/v/edmv.svg)](https://crates.io/crates/edmv)
 [![downloads](https://img.shields.io/github/downloads/terror/edmv/total.svg)](https://github.com/terror/edmv/releases)
 [![dependency status](https://deps.rs/repo/github/terror/edmv/status.svg)](https://deps.rs/repo/github/terror/edmv)
