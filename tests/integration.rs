@@ -2,14 +2,20 @@ use {
   executable_path::executable_path,
   pretty_assertions::assert_eq,
   std::{
-    fs::{self, File, Permissions},
-    os::unix::fs::PermissionsExt,
+    fs::{self, File},
+    path::PathBuf,
     process::Command,
     str,
   },
   tempfile::TempDir,
   unindent::Unindent,
 };
+
+#[cfg(unix)]
+use std::{fs::Permissions, os::unix::fs::PermissionsExt};
+
+#[cfg(windows)]
+use std::{env, sync::OnceLock};
 
 type Result<T = (), E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
@@ -38,6 +44,26 @@ struct Operation<'a> {
   source: &'a str,
   destination: Option<&'a str>,
 }
+
+#[cfg(windows)]
+const WINDOWS_EDITOR_STUB: &str = r#"
+use std::{env, fs, process};
+
+fn main() {
+  let path = match env::args().nth(1) {
+    Some(path) => path,
+    None => return,
+  };
+
+  let contents = env::var("EDMV_TEST_EDITOR_CONTENT").unwrap_or_default();
+  let data = format!("{contents}\n");
+
+  if let Err(error) = fs::write(path, data) {
+    eprintln!("failed to write editor output: {error}");
+    process::exit(1);
+  }
+}
+"#;
 
 struct Test<'a> {
   arguments: Vec<String>,
@@ -114,32 +140,87 @@ impl<'a> Test<'a> {
     self.run_and_return_tempdir().map(|_| ())
   }
 
-  fn command(&self) -> Result<Command> {
-    let mut command = Command::new(executable_path(env!("CARGO_PKG_NAME")));
-
-    let editor = self.tempdir.path().join("editor");
+  #[cfg(unix)]
+  fn editor(tempdir: &TempDir, contents: &str) -> Result<PathBuf> {
+    let editor = tempdir.path().join("editor.sh");
 
     fs::write(
       &editor,
-      format!(
-        "#!/bin/bash\necho -e \"{}\" > \"$1\"",
-        self
-          .operations
-          .iter()
-          .filter_map(|path| path.destination)
-          .collect::<Vec<_>>()
-          .join("\n")
-      ),
+      format!("#!/bin/bash\necho -e \"{}\" > \"$1\"", contents),
     )?;
 
     fs::set_permissions(&editor, Permissions::from_mode(0o755))?;
+
+    Ok(editor)
+  }
+
+  #[cfg(windows)]
+  fn editor(_tempdir: &TempDir, _contents: &str) -> Result<PathBuf> {
+    use std::{
+      fs,
+      io::{self, ErrorKind},
+    };
+
+    static EDITOR: OnceLock<PathBuf> = OnceLock::new();
+
+    EDITOR
+      .get_or_try_init(|| {
+        let dir = tempfile::tempdir()?;
+        let dir = dir.into_path();
+
+        let src = dir.join("editor_stub.rs");
+        fs::write(&src, WINDOWS_EDITOR_STUB)?;
+
+        let binary =
+          dir.join(format!("editor_stub{}", std::env::consts::EXE_SUFFIX));
+
+        let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+
+        let status = Command::new(rustc)
+          .arg("--crate-name")
+          .arg("edmv_editor_stub")
+          .arg("--edition")
+          .arg("2021")
+          .arg(&src)
+          .arg("-o")
+          .arg(&binary)
+          .status()?;
+
+        if !status.success() {
+          return Err(Box::new(io::Error::new(
+            ErrorKind::Other,
+            "failed to compile editor stub",
+          )));
+        }
+
+        Ok(binary)
+      })
+      .cloned()
+  }
+
+  fn command(&self) -> Result<Command> {
+    let mut command = Command::new(executable_path(env!("CARGO_PKG_NAME")));
+
+    let editor_contents = self
+      .operations
+      .iter()
+      .filter_map(|operation| operation.destination)
+      .collect::<Vec<_>>()
+      .join("\n");
+
+    let editor = Self::editor(&self.tempdir, &editor_contents)?;
 
     command
       .current_dir(&self.tempdir)
       .args(self.operations.iter().map(|path| path.source))
       .arg("--editor")
-      .arg(editor)
+      .arg(&editor)
       .args(&self.arguments);
+
+    #[cfg(windows)]
+    {
+      command.env("EDMV_TEST_EDITOR_CONTENT", editor_contents);
+    }
 
     Ok(command)
   }

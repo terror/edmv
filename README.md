@@ -4,19 +4,19 @@
 [![CI](https://github.com/terror/edmv/actions/workflows/ci.yaml/badge.svg)](https://github.com/terror/edmv/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/gh/terror/edmv/graph/badge.svg?token=7CH4XDXO7Z)](https://codecov.io/gh/terror/edmv)
 [![crates.io](https://shields.io/crates/v/edmv.svg)](https://crates.io/crates/edmv)
-[![downloads](https://img.shields.io/github/downloads/terror/edmv/total.svg)](https://github.com/terror/edmv/releases)
+[![downloads](https://img.shields.io/crates/d/edmv)](https://crates.io/crates/edmv)
 [![dependency status](https://deps.rs/repo/github/terror/edmv/status.svg)](https://deps.rs/repo/github/terror/edmv)
 
 **edmv** is a tool that lets you bulk rename files fast using your preferred
 text editor.
 
-### Demo
+## Demo
 
 Below is a short demo showcasing the main functionality of the program:
 
 [![asciicast](https://asciinema.org/a/33OVZX9m1PZcyqYvdqmtvBRRv.svg)](https://asciinema.org/a/33OVZX9m1PZcyqYvdqmtvBRRv)
 
-### Installation
+## Installation
 
 You can install the **edmv** command-line utility via the rust package manager
 [cargo](https://doc.rust-lang.org/cargo/):
@@ -37,7 +37,7 @@ cargo install --path .
 [releases](https://github.com/terror/edmv/releases) page.
 
 
-### Usage
+## Usage
 
 Below is the output of `edmv --help`:
 
@@ -62,7 +62,7 @@ An option of note is the `--resolve` option, this applies to sources an
 intermediate rename to either a temporary directory or file - automatically
 handling conflicts such as overlapping or circular renames.
 
-### Prior Art
+## Prior Art
 
 **edmv** is a tested and extended re-implementation of
 the version [Casey](https://github.com/casey) wrote in
