@@ -3,7 +3,7 @@ use {
   pretty_assertions::assert_eq,
   std::{
     fs::{self, File},
-    path::PathBuf,
+    path::{PathBuf, MAIN_SEPARATOR},
     process::Command,
     str,
   },
@@ -78,6 +78,17 @@ struct Test<'a> {
   tempdir: TempDir,
 }
 
+fn normalize_expected_text(text: &str) -> String {
+  let text = text.unindent();
+
+  if MAIN_SEPARATOR == '/' {
+    text
+  } else {
+    let separator = MAIN_SEPARATOR.to_string();
+    text.replace('/', &separator)
+  }
+}
+
 impl<'a> Test<'a> {
   fn new() -> Result<Self> {
     Ok(Self {
@@ -112,14 +123,14 @@ impl<'a> Test<'a> {
 
   fn expected_stderr(self, expected_stderr: &str) -> Self {
     Self {
-      expected_stderr: expected_stderr.unindent(),
+      expected_stderr: normalize_expected_text(expected_stderr),
       ..self
     }
   }
 
   fn expected_stdout(self, expected_stdout: &str) -> Self {
     Self {
-      expected_stdout: expected_stdout.unindent(),
+      expected_stdout: normalize_expected_text(expected_stdout),
       ..self
     }
   }
