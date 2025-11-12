@@ -15,7 +15,10 @@ use {
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
 #[cfg(windows)]
-use std::{env, sync::OnceLock};
+use once_cell::sync::OnceCell;
+
+#[cfg(windows)]
+use std::{env, io};
 
 type Result<T = (), E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
@@ -156,46 +159,45 @@ impl<'a> Test<'a> {
 
   #[cfg(windows)]
   fn editor(_tempdir: &TempDir, _contents: &str) -> Result<PathBuf> {
-    use std::{
-      fs,
-      io::{self, ErrorKind},
-    };
+    use std::fs;
 
-    static EDITOR: OnceLock<PathBuf> = OnceLock::new();
+    static EDITOR: OnceCell<PathBuf> = OnceCell::new();
 
-    EDITOR
-      .get_or_try_init(|| {
-        let dir = tempfile::tempdir()?;
-        let dir = dir.into_path();
+    if let Some(path) = EDITOR.get() {
+      return Ok(path.clone());
+    }
 
-        let src = dir.join("editor_stub.rs");
-        fs::write(&src, WINDOWS_EDITOR_STUB)?;
+    let dir = tempfile::tempdir()?;
+    let dir = dir.into_path();
 
-        let binary =
-          dir.join(format!("editor_stub{}", std::env::consts::EXE_SUFFIX));
+    let src = dir.join("editor_stub.rs");
+    fs::write(&src, WINDOWS_EDITOR_STUB)?;
 
-        let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+    let binary =
+      dir.join(format!("editor_stub{}", std::env::consts::EXE_SUFFIX));
 
-        let status = Command::new(rustc)
-          .arg("--crate-name")
-          .arg("edmv_editor_stub")
-          .arg("--edition")
-          .arg("2021")
-          .arg(&src)
-          .arg("-o")
-          .arg(&binary)
-          .status()?;
+    let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
 
-        if !status.success() {
-          return Err(Box::new(io::Error::new(
-            ErrorKind::Other,
-            "failed to compile editor stub",
-          )));
-        }
+    let status = Command::new(rustc)
+      .arg("--crate-name")
+      .arg("edmv_editor_stub")
+      .arg("--edition")
+      .arg("2021")
+      .arg(&src)
+      .arg("-o")
+      .arg(&binary)
+      .status()?;
 
-        Ok(binary)
-      })
-      .cloned()
+    if !status.success() {
+      return Err(Box::new(io::Error::new(
+        io::ErrorKind::Other,
+        "failed to compile editor stub",
+      )));
+    }
+
+    let _ = EDITOR.set(binary.clone());
+
+    Ok(binary)
   }
 
   fn command(&self) -> Result<Command> {
