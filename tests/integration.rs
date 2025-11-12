@@ -144,7 +144,7 @@ impl<'a> Test<'a> {
     }
 
     let dir = tempfile::tempdir()?;
-    let dir = dir.keep().map_err(|(_, error)| error)?;
+    let dir = dir.keep();
 
     let src = dir.join("editor_stub.rs");
     fs::write(&src, WINDOWS_EDITOR_STUB)?;
