@@ -18,24 +18,45 @@ Below is a short demo showcasing the main functionality of the program:
 
 ## Installation
 
-You can install the **edmv** command-line utility via the rust package manager
-[cargo](https://doc.rust-lang.org/cargo/):
+`edmv` should run on any system, including Linux, MacOS, and the BSDs.
+
+The easiest way to install it is by using
+[cargo](https://doc.rust-lang.org/cargo/index.html), the Rust package manager:
 
 ```bash
 cargo install edmv
 ```
 
-...or you can build it from source:
+Otherwise, see below for the complete package list:
 
-```bash
-git clone https://github.com/terror/edmv
-cd edmv
-cargo install --path .
-```
+#### Cross-platform
 
-...or you can download one of the pre-built binaries from the
-[releases](https://github.com/terror/edmv/releases) page.
+<table>
+  <thead>
+    <tr>
+      <th>Package Manager</th>
+      <th>Package</th>
+      <th>Command</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href=https://www.rust-lang.org>Cargo</a></td>
+      <td><a href=https://crates.io/crates/edmv>edmv</a></td>
+      <td><code>cargo install edmv</code></td>
+    </tr>
+    <tr>
+      <td><a href=https://brew.sh>Homebrew</a></td>
+      <td><a href=https://github.com/terror/homebrew-tap>terror/tap/edmv</a></td>
+      <td><code>brew install terror/tap/edmv</code></td>
+    </tr>
+  </tbody>
+</table>
 
+### Pre-built binaries
+
+Pre-built binaries for Linux, MacOS, and Windows can be found on
+[the releases page](https://github.com/terror/edmv/releases).
 
 ## Usage
 
@@ -64,6 +85,6 @@ handling conflicts such as overlapping or circular renames.
 
 ## Prior Art
 
-**edmv** is a tested and extended re-implementation of
-the version [Casey](https://github.com/casey) wrote in
+**edmv** is a tested and extended re-implementation of the version
+[Casey](https://github.com/casey) wrote in
 [Python](https://github.com/casey/edmv), do check it out!
