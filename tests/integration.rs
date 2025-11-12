@@ -3,7 +3,7 @@ use {
   pretty_assertions::assert_eq,
   std::{
     fs::{self, File},
-    path::{PathBuf, MAIN_SEPARATOR},
+    path::PathBuf,
     process::Command,
     str,
   },
@@ -15,7 +15,10 @@ use {
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
 #[cfg(windows)]
-use {io, once_cell::sync::OnceCell, std::env};
+use {
+  once_cell::sync::OnceCell,
+  std::{env, io},
+};
 
 type Result<T = (), E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
@@ -225,13 +228,16 @@ impl<'a> Test<'a> {
   }
 
   fn normalize_expected_text(text: &str) -> String {
-    let text = text.unindent();
+    text.unindent()
+  }
 
-    if MAIN_SEPARATOR == '/' {
-      text
+  fn normalize_actual_text(text: &str) -> String {
+    let text = text.replace("\r\n", "\n");
+
+    if cfg!(windows) {
+      text.replace('\\', "/")
     } else {
-      let separator = MAIN_SEPARATOR.to_string();
-      text.replace('/', &separator)
+      text
     }
   }
 
@@ -240,7 +246,7 @@ impl<'a> Test<'a> {
 
     assert_eq!(output.status.code(), Some(self.expected_status));
 
-    let stderr = str::from_utf8(&output.stderr)?;
+    let stderr = Self::normalize_actual_text(str::from_utf8(&output.stderr)?);
 
     if self.expected_stderr.is_empty() && !stderr.is_empty() {
       panic!("Expected empty stderr, but received: {}", stderr);
@@ -248,7 +254,10 @@ impl<'a> Test<'a> {
       assert_eq!(stderr, self.expected_stderr);
     }
 
-    assert_eq!(str::from_utf8(&output.stdout)?, self.expected_stdout);
+    assert_eq!(
+      Self::normalize_actual_text(str::from_utf8(&output.stdout)?),
+      self.expected_stdout
+    );
 
     let sources = self
       .operations
