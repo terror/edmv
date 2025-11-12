@@ -15,10 +15,7 @@ use {
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 
 #[cfg(windows)]
-use once_cell::sync::OnceCell;
-
-#[cfg(windows)]
-use std::{env, io};
+use {io, once_cell::sync::OnceCell, std::env};
 
 type Result<T = (), E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
@@ -78,17 +75,6 @@ struct Test<'a> {
   tempdir: TempDir,
 }
 
-fn normalize_expected_text(text: &str) -> String {
-  let text = text.unindent();
-
-  if MAIN_SEPARATOR == '/' {
-    text
-  } else {
-    let separator = MAIN_SEPARATOR.to_string();
-    text.replace('/', &separator)
-  }
-}
-
 impl<'a> Test<'a> {
   fn new() -> Result<Self> {
     Ok(Self {
@@ -123,14 +109,14 @@ impl<'a> Test<'a> {
 
   fn expected_stderr(self, expected_stderr: &str) -> Self {
     Self {
-      expected_stderr: normalize_expected_text(expected_stderr),
+      expected_stderr: Self::normalize_expected_text(expected_stderr),
       ..self
     }
   }
 
   fn expected_stdout(self, expected_stdout: &str) -> Self {
     Self {
-      expected_stdout: normalize_expected_text(expected_stdout),
+      expected_stdout: Self::normalize_expected_text(expected_stdout),
       ..self
     }
   }
@@ -236,6 +222,17 @@ impl<'a> Test<'a> {
     }
 
     Ok(command)
+  }
+
+  fn normalize_expected_text(text: &str) -> String {
+    let text = text.unindent();
+
+    if MAIN_SEPARATOR == '/' {
+      text
+    } else {
+      let separator = MAIN_SEPARATOR.to_string();
+      text.replace('/', &separator)
+    }
   }
 
   fn run_and_return_tempdir(self) -> Result<TempDir> {
