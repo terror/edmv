@@ -23,8 +23,8 @@ use {
 type Result<T = (), E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
 enum Path<'a> {
-  File(&'a str),
   Directory(&'a str),
+  File(&'a str),
 }
 
 impl Path<'_> {
@@ -44,8 +44,8 @@ impl Path<'_> {
 
 #[derive(Clone)]
 struct Operation<'a> {
-  source: &'a str,
   destination: Option<&'a str>,
+  source: &'a str,
 }
 
 #[cfg(windows)]
@@ -79,56 +79,36 @@ struct Test<'a> {
 }
 
 impl<'a> Test<'a> {
-  fn new() -> Result<Self> {
-    Ok(Self {
-      arguments: Vec::new(),
-      exists: Vec::new(),
-      expected_status: 0,
-      expected_stderr: String::new(),
-      expected_stdout: String::new(),
-      operations: Vec::new(),
-      tempdir: TempDir::new()?,
-    })
-  }
-
   fn argument(mut self, argument: &str) -> Self {
     self.arguments.push(argument.to_owned());
     self
   }
 
-  fn exists(self, exists: &[&'a str]) -> Self {
-    Self {
-      exists: exists.to_vec(),
-      ..self
-    }
-  }
+  fn command(&self) -> Result<Command> {
+    let mut command = Command::new(executable_path(env!("CARGO_PKG_NAME")));
 
-  fn expected_status(self, expected_status: i32) -> Self {
-    Self {
-      expected_status,
-      ..self
-    }
-  }
+    let editor_contents = self
+      .operations
+      .iter()
+      .filter_map(|operation| operation.destination)
+      .collect::<Vec<_>>()
+      .join("\n");
 
-  fn expected_stderr(self, expected_stderr: &str) -> Self {
-    Self {
-      expected_stderr: Self::normalize_expected_text(expected_stderr),
-      ..self
-    }
-  }
+    let editor = Self::editor(&self.tempdir, &editor_contents)?;
 
-  fn expected_stdout(self, expected_stdout: &str) -> Self {
-    Self {
-      expected_stdout: Self::normalize_expected_text(expected_stdout),
-      ..self
-    }
-  }
+    command
+      .current_dir(&self.tempdir)
+      .args(self.operations.iter().map(|path| path.source))
+      .arg("--editor")
+      .arg(&editor)
+      .args(&self.arguments);
 
-  fn operations(self, operations: &[Operation<'a>]) -> Self {
-    Self {
-      operations: operations.to_vec(),
-      ..self
+    #[cfg(windows)]
+    {
+      command.env("EDMV_TEST_EDITOR_CONTENT", editor_contents);
     }
+
+    Ok(command)
   }
 
   fn create(self, paths: &[Path]) -> Result<Self> {
@@ -139,17 +119,13 @@ impl<'a> Test<'a> {
     Ok(self)
   }
 
-  fn run(self) -> Result {
-    self.run_and_return_tempdir().map(|_| ())
-  }
-
   #[cfg(unix)]
   fn editor(tempdir: &TempDir, contents: &str) -> Result<PathBuf> {
     let editor = tempdir.path().join("editor.sh");
 
     fs::write(
       &editor,
-      format!("#!/bin/bash\necho -e \"{}\" > \"$1\"", contents),
+      format!("#!/bin/bash\necho -e \"{contents}\" > \"$1\""),
     )?;
 
     fs::set_permissions(&editor, Permissions::from_mode(0o755))?;
@@ -200,35 +176,44 @@ impl<'a> Test<'a> {
     Ok(binary)
   }
 
-  fn command(&self) -> Result<Command> {
-    let mut command = Command::new(executable_path(env!("CARGO_PKG_NAME")));
-
-    let editor_contents = self
-      .operations
-      .iter()
-      .filter_map(|operation| operation.destination)
-      .collect::<Vec<_>>()
-      .join("\n");
-
-    let editor = Self::editor(&self.tempdir, &editor_contents)?;
-
-    command
-      .current_dir(&self.tempdir)
-      .args(self.operations.iter().map(|path| path.source))
-      .arg("--editor")
-      .arg(&editor)
-      .args(&self.arguments);
-
-    #[cfg(windows)]
-    {
-      command.env("EDMV_TEST_EDITOR_CONTENT", editor_contents);
+  fn exists(self, exists: &[&'a str]) -> Self {
+    Self {
+      exists: exists.to_vec(),
+      ..self
     }
-
-    Ok(command)
   }
 
-  fn normalize_expected_text(text: &str) -> String {
-    text.unindent()
+  fn expected_status(self, expected_status: i32) -> Self {
+    Self {
+      expected_status,
+      ..self
+    }
+  }
+
+  fn expected_stderr(self, expected_stderr: &str) -> Self {
+    Self {
+      expected_stderr: Self::normalize_expected_text(expected_stderr),
+      ..self
+    }
+  }
+
+  fn expected_stdout(self, expected_stdout: &str) -> Self {
+    Self {
+      expected_stdout: Self::normalize_expected_text(expected_stdout),
+      ..self
+    }
+  }
+
+  fn new() -> Result<Self> {
+    Ok(Self {
+      arguments: Vec::new(),
+      exists: Vec::new(),
+      expected_status: 0,
+      expected_stderr: String::new(),
+      expected_stdout: String::new(),
+      operations: Vec::new(),
+      tempdir: TempDir::new()?,
+    })
   }
 
   fn normalize_actual_text(text: &str) -> String {
@@ -241,6 +226,21 @@ impl<'a> Test<'a> {
     }
   }
 
+  fn normalize_expected_text(text: &str) -> String {
+    text.unindent()
+  }
+
+  fn operations(self, operations: &[Operation<'a>]) -> Self {
+    Self {
+      operations: operations.to_vec(),
+      ..self
+    }
+  }
+
+  fn run(self) -> Result {
+    self.run_and_return_tempdir().map(|_| ())
+  }
+
   fn run_and_return_tempdir(self) -> Result<TempDir> {
     let output = self.command()?.output()?;
 
@@ -249,7 +249,7 @@ impl<'a> Test<'a> {
     let stderr = Self::normalize_actual_text(str::from_utf8(&output.stderr)?);
 
     if self.expected_stderr.is_empty() && !stderr.is_empty() {
-      panic!("Expected empty stderr, but received: {}", stderr);
+      panic!("Expected empty stderr, but received: {stderr}");
     } else {
       assert_eq!(stderr, self.expected_stderr);
     }
@@ -268,7 +268,7 @@ impl<'a> Test<'a> {
     let destinations = self
       .operations
       .iter()
-      .flat_map(|operation| operation.destination)
+      .filter_map(|operation| operation.destination)
       .collect::<Vec<_>>();
 
     let combined = sources
@@ -276,12 +276,12 @@ impl<'a> Test<'a> {
       .chain(destinations.iter())
       .collect::<Vec<_>>();
 
-    combined.iter().for_each(|path| {
+    for path in &combined {
       assert_eq!(
         self.exists.contains(path),
         self.tempdir.path().join(path).exists()
       );
-    });
+    }
 
     self
       .exists
