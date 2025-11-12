@@ -1,6 +1,6 @@
 [package]
 name = "edmv"
-version = "1.0.0"
+version = "1.0.1"
 description = "Bulk rename files using your favorite editor"
 authors = ["Liam <liam@scalzulli.com>"]
 license = "CC0-1.0"
