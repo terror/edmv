@@ -2,13 +2,22 @@ use {
   executable_path::executable_path,
   pretty_assertions::assert_eq,
   std::{
-    fs::{self, File, Permissions},
-    os::unix::fs::PermissionsExt,
+    fs::{self, File},
+    path::PathBuf,
     process::Command,
     str,
   },
   tempfile::TempDir,
   unindent::Unindent,
+};
+
+#[cfg(unix)]
+use std::{fs::Permissions, os::unix::fs::PermissionsExt};
+
+#[cfg(windows)]
+use {
+  once_cell::sync::OnceCell,
+  std::{env, io},
 };
 
 type Result<T = (), E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
@@ -38,6 +47,26 @@ struct Operation<'a> {
   source: &'a str,
   destination: Option<&'a str>,
 }
+
+#[cfg(windows)]
+const WINDOWS_EDITOR_STUB: &str = r#"
+use std::{env, fs, process};
+
+fn main() {
+  let path = match env::args().nth(1) {
+    Some(path) => path,
+    None => return,
+  };
+
+  let contents = env::var("EDMV_TEST_EDITOR_CONTENT").unwrap_or_default();
+  let data = format!("{contents}\n");
+
+  if let Err(error) = fs::write(path, data) {
+    eprintln!("failed to write editor output: {error}");
+    process::exit(1);
+  }
+}
+"#;
 
 struct Test<'a> {
   arguments: Vec<String>,
@@ -83,14 +112,14 @@ impl<'a> Test<'a> {
 
   fn expected_stderr(self, expected_stderr: &str) -> Self {
     Self {
-      expected_stderr: expected_stderr.unindent(),
+      expected_stderr: Self::normalize_expected_text(expected_stderr),
       ..self
     }
   }
 
   fn expected_stdout(self, expected_stdout: &str) -> Self {
     Self {
-      expected_stdout: expected_stdout.unindent(),
+      expected_stdout: Self::normalize_expected_text(expected_stdout),
       ..self
     }
   }
@@ -114,34 +143,102 @@ impl<'a> Test<'a> {
     self.run_and_return_tempdir().map(|_| ())
   }
 
-  fn command(&self) -> Result<Command> {
-    let mut command = Command::new(executable_path(env!("CARGO_PKG_NAME")));
-
-    let editor = self.tempdir.path().join("editor");
+  #[cfg(unix)]
+  fn editor(tempdir: &TempDir, contents: &str) -> Result<PathBuf> {
+    let editor = tempdir.path().join("editor.sh");
 
     fs::write(
       &editor,
-      format!(
-        "#!/bin/bash\necho -e \"{}\" > \"$1\"",
-        self
-          .operations
-          .iter()
-          .filter_map(|path| path.destination)
-          .collect::<Vec<_>>()
-          .join("\n")
-      ),
+      format!("#!/bin/bash\necho -e \"{}\" > \"$1\"", contents),
     )?;
 
     fs::set_permissions(&editor, Permissions::from_mode(0o755))?;
+
+    Ok(editor)
+  }
+
+  #[cfg(windows)]
+  fn editor(_tempdir: &TempDir, _contents: &str) -> Result<PathBuf> {
+    use std::fs;
+
+    static EDITOR: OnceCell<PathBuf> = OnceCell::new();
+
+    if let Some(path) = EDITOR.get() {
+      return Ok(path.clone());
+    }
+
+    let dir = tempfile::tempdir()?;
+    let dir = dir.into_path();
+
+    let src = dir.join("editor_stub.rs");
+    fs::write(&src, WINDOWS_EDITOR_STUB)?;
+
+    let binary =
+      dir.join(format!("editor_stub{}", std::env::consts::EXE_SUFFIX));
+
+    let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+
+    let status = Command::new(rustc)
+      .arg("--crate-name")
+      .arg("edmv_editor_stub")
+      .arg("--edition")
+      .arg("2021")
+      .arg(&src)
+      .arg("-o")
+      .arg(&binary)
+      .status()?;
+
+    if !status.success() {
+      return Err(Box::new(io::Error::new(
+        io::ErrorKind::Other,
+        "failed to compile editor stub",
+      )));
+    }
+
+    let _ = EDITOR.set(binary.clone());
+
+    Ok(binary)
+  }
+
+  fn command(&self) -> Result<Command> {
+    let mut command = Command::new(executable_path(env!("CARGO_PKG_NAME")));
+
+    let editor_contents = self
+      .operations
+      .iter()
+      .filter_map(|operation| operation.destination)
+      .collect::<Vec<_>>()
+      .join("\n");
+
+    let editor = Self::editor(&self.tempdir, &editor_contents)?;
 
     command
       .current_dir(&self.tempdir)
       .args(self.operations.iter().map(|path| path.source))
       .arg("--editor")
-      .arg(editor)
+      .arg(&editor)
       .args(&self.arguments);
 
+    #[cfg(windows)]
+    {
+      command.env("EDMV_TEST_EDITOR_CONTENT", editor_contents);
+    }
+
     Ok(command)
+  }
+
+  fn normalize_expected_text(text: &str) -> String {
+    text.unindent()
+  }
+
+  fn normalize_actual_text(text: &str) -> String {
+    let text = text.replace("\r\n", "\n");
+
+    if cfg!(windows) {
+      text.replace('\\', "/")
+    } else {
+      text
+    }
   }
 
   fn run_and_return_tempdir(self) -> Result<TempDir> {
@@ -149,7 +246,7 @@ impl<'a> Test<'a> {
 
     assert_eq!(output.status.code(), Some(self.expected_status));
 
-    let stderr = str::from_utf8(&output.stderr)?;
+    let stderr = Self::normalize_actual_text(str::from_utf8(&output.stderr)?);
 
     if self.expected_stderr.is_empty() && !stderr.is_empty() {
       panic!("Expected empty stderr, but received: {}", stderr);
@@ -157,7 +254,10 @@ impl<'a> Test<'a> {
       assert_eq!(stderr, self.expected_stderr);
     }
 
-    assert_eq!(str::from_utf8(&output.stdout)?, self.expected_stdout);
+    assert_eq!(
+      Self::normalize_actual_text(str::from_utf8(&output.stdout)?),
+      self.expected_stdout
+    );
 
     let sources = self
       .operations

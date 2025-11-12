@@ -1,39 +1,64 @@
 ## edmv 📦
 
-[![CI](https://github.com/terror/edmv/actions/workflows/ci.yml/badge.svg)](https://github.com/terror/edmv/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/release/terror/edmv.svg?label=release&style=flat&labelColor=282c34&logo=github)](https://github.com/terror/edmv/releases/latest)
+[![CI](https://github.com/terror/edmv/actions/workflows/ci.yaml/badge.svg)](https://github.com/terror/edmv/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/terror/edmv/graph/badge.svg?token=7CH4XDXO7Z)](https://codecov.io/gh/terror/edmv)
 [![crates.io](https://shields.io/crates/v/edmv.svg)](https://crates.io/crates/edmv)
+[![downloads](https://img.shields.io/crates/d/edmv)](https://crates.io/crates/edmv)
+[![dependency status](https://deps.rs/repo/github/terror/edmv/status.svg)](https://deps.rs/repo/github/terror/edmv)
 
 **edmv** is a tool that lets you bulk rename files fast using your preferred
 text editor.
 
-### Demo
+## Demo
 
 Below is a short demo showcasing the main functionality of the program:
 
 [![asciicast](https://asciinema.org/a/33OVZX9m1PZcyqYvdqmtvBRRv.svg)](https://asciinema.org/a/33OVZX9m1PZcyqYvdqmtvBRRv)
 
-### Installation
+## Installation
 
-You can install the **edmv** command-line utility via the rust package manager
-[cargo](https://doc.rust-lang.org/cargo/):
+`edmv` should run on any system, including Linux, MacOS, and the BSDs.
+
+The easiest way to install it is by using
+[cargo](https://doc.rust-lang.org/cargo/index.html), the Rust package manager:
 
 ```bash
 cargo install edmv
 ```
 
-...or you can build it from source:
+Otherwise, see below for the complete package list:
 
-```bash
-git clone https://github.com/terror/edmv
-cd edmv
-cargo install --path .
-```
+#### Cross-platform
 
-...or you can download one of the pre-built binaries from the
-[releases](https://github.com/terror/edmv/releases) page.
+<table>
+  <thead>
+    <tr>
+      <th>Package Manager</th>
+      <th>Package</th>
+      <th>Command</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href=https://www.rust-lang.org>Cargo</a></td>
+      <td><a href=https://crates.io/crates/edmv>edmv</a></td>
+      <td><code>cargo install edmv</code></td>
+    </tr>
+    <tr>
+      <td><a href=https://brew.sh>Homebrew</a></td>
+      <td><a href=https://github.com/terror/homebrew-tap>terror/tap/edmv</a></td>
+      <td><code>brew install terror/tap/edmv</code></td>
+    </tr>
+  </tbody>
+</table>
 
+### Pre-built binaries
 
-### Usage
+Pre-built binaries for Linux, MacOS, and Windows can be found on
+[the releases page](https://github.com/terror/edmv/releases).
+
+## Usage
 
 Below is the output of `edmv --help`:
 
@@ -58,8 +83,8 @@ An option of note is the `--resolve` option, this applies to sources an
 intermediate rename to either a temporary directory or file - automatically
 handling conflicts such as overlapping or circular renames.
 
-### Prior Art
+## Prior Art
 
-**edmv** is a tested and extended re-implementation of
-the version [Casey](https://github.com/casey) wrote in
+**edmv** is a tested and extended re-implementation of the version
+[Casey](https://github.com/casey) wrote in
 [Python](https://github.com/casey/edmv), do check it out!
