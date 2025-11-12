@@ -14,17 +14,18 @@ use {
 
 #[derive(Debug)]
 enum Intermediate {
-  File(NamedTempFile),
   Directory(TempDir),
+  File(NamedTempFile),
 }
 
 impl TryFrom<PathBuf> for Intermediate {
   type Error = anyhow::Error;
 
   fn try_from(path: PathBuf) -> Result<Self> {
-    Ok(match path.is_file() {
-      true => Intermediate::File(NamedTempFile::new()?),
-      _ => Intermediate::Directory(TempDir::new()?),
+    Ok(if path.is_file() {
+      Intermediate::File(NamedTempFile::new()?)
+    } else {
+      Intermediate::Directory(TempDir::new()?)
     })
   }
 }
@@ -54,9 +55,10 @@ impl PathBufExt for PathBuf {
   }
 
   fn with(&self, source: &Path) -> Self {
-    match self.is_dir() {
-      true => self.join(source),
-      _ => self.to_path_buf(),
+    if self.is_dir() {
+      self.join(source)
+    } else {
+      self.clone()
     }
   }
 }
@@ -64,14 +66,14 @@ impl PathBufExt for PathBuf {
 #[derive(Debug, Parser)]
 #[command(about, author, version)]
 struct Arguments {
+  #[clap(long, help = "Run without making any changes")]
+  dry_run: bool,
   #[clap(long, help = "Editor command to use")]
   editor: Option<String>,
   #[clap(long, help = "Overwrite existing files")]
   force: bool,
   #[clap(long, help = "Resolve conflicting renames")]
   resolve: bool,
-  #[clap(long, help = "Run without making any changes")]
-  dry_run: bool,
   #[clap(name = "sources", help = "Paths to edit")]
   sources: Vec<String>,
 }
@@ -110,7 +112,7 @@ impl Arguments {
     let destinations = fs::read_to_string(file.path())?
       .trim()
       .lines()
-      .map(|line| line.to_string())
+      .map(str::to_string)
       .collect::<Vec<String>>();
 
     if self.sources.len() != destinations.len() {
@@ -157,17 +159,13 @@ impl Arguments {
     let existing = pairs
       .iter()
       .filter(|(_, destination)| fs::metadata(destination).is_ok())
-      .map(|(_, destination)| destination.display())
+      .map(|(_, destination)| destination.display().to_string())
       .collect::<Vec<_>>();
 
     if !self.force && !existing.is_empty() {
       bail!(
         "Found destination(s) that already exist: {}, use --force to overwrite",
-        existing
-          .iter()
-          .map(|path| path.to_string())
-          .collect::<Vec<String>>()
-          .join(", ")
+        existing.join(", ")
       );
     }
 
@@ -212,18 +210,15 @@ impl Arguments {
       })
       .collect::<Result<Vec<_>>>()?;
 
-    let par = absolutes
+    let absent = absolutes
       .iter()
       .zip(destinations.iter())
       .filter_map(|(path, destination)| {
-        path.parent().map(|parent| (parent, destination))
+        path
+          .parent()
+          .filter(|parent| !parent.exists())
+          .map(|_| destination.clone())
       })
-      .collect::<Vec<_>>();
-
-    let absent = par
-      .iter()
-      .filter(|(path, _)| !path.exists())
-      .map(|(_, destination)| destination.to_string())
       .collect::<Vec<String>>();
 
     if !absent.is_empty() {
@@ -271,7 +266,7 @@ impl Arguments {
 
             if i == pipeline.len() - 1 && j < first.len() {
               println!("{} -> {}", first[j].0.display(), destination.display());
-              changed += !self.dry_run as usize;
+              changed += usize::from(!self.dry_run);
             }
 
             Ok(())
