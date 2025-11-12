@@ -1,7 +1,10 @@
 ## edmv 📦
 
-[![CI](https://github.com/terror/edmv/actions/workflows/ci.yml/badge.svg)](https://github.com/terror/edmv/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/release/terror/edmv.svg?label=release&style=flat&labelColor=282c34&logo=github)](https://github.com/terror/edmv/releases/latest)
+[![CI](https://github.com/terror/edmv/actions/workflows/ci.yaml/badge.svg)](https://github.com/terror/edmv/actions/workflows/ci.yaml)
 [![crates.io](https://shields.io/crates/v/edmv.svg)](https://crates.io/crates/edmv)
+[![downloads](https://img.shields.io/github/downloads/terror/edmv/total.svg)](https://github.com/terror/edmv/releases)
+[![dependency status](https://deps.rs/repo/github/terror/edmv/status.svg)](https://deps.rs/repo/github/terror/edmv)
 
 **edmv** is a tool that lets you bulk rename files fast using your preferred
 text editor.
