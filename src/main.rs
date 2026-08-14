@@ -101,7 +101,7 @@ impl Arguments {
       .suffix(".txt")
       .tempfile()?;
 
-    writeln!(file, "{}", &self.sources.join("\n"))?;
+    writeln!(file, "{}", self.sources.join("\n"))?;
 
     let status = Command::new(editor).arg(file.path()).status()?;
 
@@ -292,7 +292,7 @@ impl Arguments {
       ))?,
     }
 
-    println!("{changed} path(s) changed",);
+    println!("{changed} path(s) changed");
 
     Ok(())
   }
